@@ -246,12 +246,30 @@ function baseAudit(symbol) {
   };
 }
 
+/*
+背離輪次規則：
+
+頂背離：
+1. 價格高點更高、DIF 高點更低。
+2. 兩個 DIF 高點都必須大於 0。
+3. DEA 從正值觸及或穿越到 <= 0，解除當前輪次。
+
+底背離：
+1. 價格低點更低、DIF 低點更高。
+2. 兩個 DIF 低點都必須小於 0。
+3. DEA 從負值觸及或穿越到 >= 0，解除當前輪次。
+
+同一輪沒有新背離，不會自行重設。
+零軸解除後，必須使用解除之後的新轉折點形成背離，才算新一輪第 1 次。
+*/
+
 function findSignals(
   kind, pairs, prices, dif, dea, dates, audit, symbol,
   rsiValues, rsiStatus, rsiDays
 ) {
   const found = [];
   const name = kind === "high" ? "頂背離" : "底背離";
+  const isTop = kind === "high";
 
   audit.candidateGroups += Math.max(0, pairs.length - 1);
 
@@ -261,41 +279,50 @@ function findSignals(
   }
 
   let runCount = 0;
-  let previousSecond = -1;
   let hadGap = false;
   let hadDivergence = false;
+  let scanCursor = 0;
+  let lastResetIndex = -1;
 
-  const directionIsPositive = kind === "high";
-
-  // 按時間順序判斷每一組相鄰波段。
-  // DEA 慢線碰到或穿過 0 軸，就結束該方向目前這一輪。
   for (let j = 1; j < pairs.length; j++) {
     const [p1, d1] = pairs[j - 1];
     const [p2, d2] = pairs[j];
+
+    /*
+    按時間順序檢查 DEA 零軸解除事件。
+    即使當前配對間隔不符合 5–60 根 K 線，
+    也要檢查期間是否出現解除事件，避免漏掉輪次重設。
+    */
+    let resetOccurred = false;
+
+    for (let i = scanCursor; i <= p2; i++) {
+      if (dea[i] == null || !Number.isFinite(dea[i])) continue;
+
+      const previousDea = i > 0 ? dea[i - 1] : null;
+
+      // 只記錄進入解除區域的事件，不在 DEA 持續位於該側時每根 K 線反覆重設。
+      const resetNow = isTop
+        ? dea[i] <= 0 && (previousDea == null || previousDea > 0)
+        : dea[i] >= 0 && (previousDea == null || previousDea < 0);
+
+      if (resetNow) {
+        lastResetIndex = i;
+        resetOccurred = true;
+      }
+    }
+
+    scanCursor = p2 + 1;
+
+    if (resetOccurred) {
+      runCount = 0;
+    }
+
     const gap = p2 - p1;
 
     if (gap < 5 || gap > 60) continue;
     hadGap = true;
 
-    // 檢查前一組波段之後到目前波段期間，
-    // DEA 是否已碰到該方向的解除零軸。
-    const from = previousSecond >= 0 ? previousSecond + 1 : p1 + 1;
-    const to = p2;
-
-    let reset = false;
-
-    for (let i = Math.max(0, from); i <= to; i++) {
-      if (dea[i] === null) continue;
-
-      if (directionIsPositive ? dea[i] <= 0 : dea[i] >= 0) {
-        reset = true;
-        break;
-      }
-    }
-
-    if (reset) runCount = 0;
-
-    const valid = kind === "high"
+    const valid = isTop
       ? prices[p2] > prices[p1] &&
         dif[d2] < dif[d1] &&
         dif[d1] > 0 &&
@@ -305,16 +332,22 @@ function findSignals(
         dif[d1] < 0 &&
         dif[d2] < 0;
 
-    previousSecond = p2;
-
     if (!valid) continue;
 
     hadDivergence = true;
+
+    /*
+    如果最近一次解除事件發生在第一個轉折點或之後，
+    這組配對仍包含解除前的轉折點，不能算新一輪。
+    必須等到兩個轉折點都在解除事件之後，才可以計數。
+    */
+    if (lastResetIndex >= p1) continue;
+
     runCount++;
 
     found.push({
       symbol,
-      signal: kind === "high" ? "MACD頂背離" : "MACD底背離",
+      signal: isTop ? "MACD頂背離" : "MACD底背離",
       count: runCount,
       date1: dates[p1],
       date2: dates[p2],
@@ -334,7 +367,7 @@ function findSignals(
     } else if (!hadDivergence) {
       audit.reasons.push(name + "：配對不符合背離條件");
     } else {
-      audit.reasons.push(name + "：沒有有效訊號");
+      audit.reasons.push(name + "：有符合背離條件的配對，但未形成有效輪次訊號");
     }
   }
 
