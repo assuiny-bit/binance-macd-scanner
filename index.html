@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幣安 MACD 背離掃描器｜連續背離版</title>
+<title>幣安 MACD 背離掃描器｜目前有效背離</title>
 <style>
 body{margin:0;padding:20px;background:#111827;color:#e5e7eb;font-family:Arial,sans-serif}
 main{max-width:1500px;margin:auto}
@@ -25,25 +25,25 @@ input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px 
 </head>
 <body>
 <main>
-<h1>幣安 MACD 背離掃描器｜連續背離版</h1>
-<p>USDT 本位永續合約｜日線已收盤 K｜連續背離紀錄｜DEA 零軸解除｜RSI 狀態與天數｜CSV 匯出</p>
+<h1>幣安 MACD 背離掃描器｜目前有效背離</h1>
+<p>只顯示「背離已成立、且 DEA 尚未觸碰零軸」的 USDT 本位永續合約（日線已收盤 K）。</p>
 
 <div class="panel">
 <button id="scan">開始掃描</button>
-<button id="exportSignals" disabled>匯出背離紀錄 CSV</button>
-<button id="exportAudit" disabled>匯出稽核 CSV</button>
+<button id="exportSignals" disabled>匯出目前有效背離 CSV</button>
 <div id="status">尚未開始掃描</div>
 </div>
 
 <div class="panel">
-<strong>背離紀錄（每一組符合條件的背離各列一筆）</strong>
+<strong>目前有效背離</strong>
+<p><small>只有背離成立且 DEA 尚未觸碰解除零軸條件的幣種會出現在這裡。</small></p>
 <div class="wrap">
 <table>
 <thead>
 <tr>
-<th>幣種</th><th>訊號</th><th>本輪第幾次</th><th>轉折日期</th>
-<th>價格變化</th><th>DIF 變化</th><th>轉折日 RSI</th>
-<th>RSI 狀態</th><th>狀態持續天數</th>
+<th>幣種</th>
+<th>有效背離</th>
+<th>背離兩個轉折日期</th>
 </tr>
 </thead>
 <tbody id="results"></tbody>
@@ -51,8 +51,9 @@ input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px 
 </div>
 </div>
 
-<div class="panel">
-<strong>逐合約掃描稽核</strong>
+<details class="panel">
+<summary><strong>進階：掃描稽核（通常不需要查看）</strong></summary>
+<button id="exportAudit" disabled>匯出稽核 CSV</button>
 <p><small>成功完成不代表一定有訊號；請同時查看資料筆數及排除原因。</small></p>
 <label>篩選：
 <select id="auditFilter">
@@ -69,16 +70,24 @@ input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px 
 <table>
 <thead>
 <tr>
-<th>合約</th><th>狀態</th><th>收到 K 線</th><th>已收盤 K 線</th>
-<th>價格高點</th><th>價格低點</th><th>DIF 高點</th><th>DIF 低點</th>
-<th>高點配對</th><th>低點配對</th><th>背離組數</th><th>訊號數</th>
+<th>合約</th>
+<th>狀態</th>
+<th>收到 K 線</th>
+<th>已收盤 K 線</th>
+<th>價格高點</th>
+<th>價格低點</th>
+<th>DIF 高點</th>
+<th>DIF 低點</th>
+<th>高點配對</th>
+<th>低點配對</th>
+<th>有效訊號數</th>
 <th>排除／錯誤原因</th>
 </tr>
 </thead>
 <tbody id="auditResults"></tbody>
 </table>
 </div>
-</div>
+</details>
 
 <small>公開行情，沒有下單功能。訊號是依照設定的規則計算，不代表未來價格一定反轉。</small>
 </main>
@@ -247,78 +256,87 @@ function baseAudit(symbol) {
 }
 
 /*
-背離輪次規則：
-
-頂背離：
-1. 價格高點更高、DIF 高點更低。
-2. 兩個 DIF 高點都必須大於 0。
-3. DEA 從正值觸及或穿越到 <= 0，解除當前輪次。
-
-底背離：
-1. 價格低點更低、DIF 低點更高。
-2. 兩個 DIF 低點都必須小於 0。
-3. DEA 從負值觸及或穿越到 >= 0，解除當前輪次。
-
-同一輪沒有新背離，不會自行重設。
-零軸解除後，必須使用解除之後的新轉折點形成背離，才算新一輪第 1 次。
-*/
-
+ * 只回傳目前仍然有效的背離。
+ *
+ * 頂背離：
+ * 1. 價格高點更高。
+ * 2. DIF 高點更低。
+ * 3. 兩個 DIF 高點都在零軸上方。
+ * 4. DEA 從零軸上方觸碰／跌破零軸時解除。
+ *
+ * 底背離：
+ * 1. 價格低點更低。
+ * 2. DIF 低點更高。
+ * 3. 兩個 DIF 低點都在零軸下方。
+ * 4. DEA 從零軸下方觸碰／突破零軸時解除。
+ *
+ * DEA 解除後，必須由解除後形成的兩個新轉折點建立新背離。
+ */
 function findSignals(
   kind, pairs, prices, dif, dea, dates, audit, symbol,
   rsiValues, rsiStatus, rsiDays
 ) {
-  const found = [];
   const name = kind === "high" ? "頂背離" : "底背離";
   const isTop = kind === "high";
 
+  let activeSignal = null;
+  let lastResetIndex = -1;
+  let scanCursor = 0;
+  let hadGap = false;
+  let hadDivergence = false;
+
   audit.candidateGroups += Math.max(0, pairs.length - 1);
+
+  /*
+   * 掃描 DEA 零軸解除事件。
+   * 頂背離：DEA 由正值到 0 或負值。
+   * 底背離：DEA 由負值到 0 或正值。
+   */
+  function scanResets(from, to) {
+    for (
+      let i = Math.max(1, from);
+      i <= to && i < dea.length;
+      i++
+    ) {
+      const current = dea[i];
+      const previous = dea[i - 1];
+
+      if (
+        current == null ||
+        previous == null ||
+        !Number.isFinite(current) ||
+        !Number.isFinite(previous)
+      ) {
+        continue;
+      }
+
+      const resetNow = isTop
+        ? previous > 0 && current <= 0
+        : previous < 0 && current >= 0;
+
+      if (resetNow) {
+        lastResetIndex = i;
+        activeSignal = null;
+      }
+    }
+  }
 
   if (pairs.length < 2) {
     audit.reasons.push(name + "：配對少於兩個，無法比較");
-    return found;
+    return [];
   }
-
-  let runCount = 0;
-  let hadGap = false;
-  let hadDivergence = false;
-  let scanCursor = 0;
-  let lastResetIndex = -1;
 
   for (let j = 1; j < pairs.length; j++) {
     const [p1, d1] = pairs[j - 1];
     const [p2, d2] = pairs[j];
 
-    /*
-    按時間順序檢查 DEA 零軸解除事件。
-    即使當前配對間隔不符合 5–60 根 K 線，
-    也要檢查期間是否出現解除事件，避免漏掉輪次重設。
-    */
-    let resetOccurred = false;
-
-    for (let i = scanCursor; i <= p2; i++) {
-      if (dea[i] == null || !Number.isFinite(dea[i])) continue;
-
-      const previousDea = i > 0 ? dea[i - 1] : null;
-
-      // 只記錄進入解除區域的事件，不在 DEA 持續位於該側時每根 K 線反覆重設。
-      const resetNow = isTop
-        ? dea[i] <= 0 && (previousDea == null || previousDea > 0)
-        : dea[i] >= 0 && (previousDea == null || previousDea < 0);
-
-      if (resetNow) {
-        lastResetIndex = i;
-        resetOccurred = true;
-      }
-    }
-
+    // 不論這組是否符合背離，都先檢查 DEA 是否已解除。
+    scanResets(scanCursor, p2);
     scanCursor = p2 + 1;
-
-    if (resetOccurred) {
-      runCount = 0;
-    }
 
     const gap = p2 - p1;
 
+    // 保留原本的轉折間隔限制。
     if (gap < 5 || gap > 60) continue;
     hadGap = true;
 
@@ -333,22 +351,18 @@ function findSignals(
         dif[d2] < 0;
 
     if (!valid) continue;
-
     hadDivergence = true;
 
-    /*
-    如果最近一次解除事件發生在第一個轉折點或之後，
-    這組配對仍包含解除前的轉折點，不能算新一輪。
-    必須等到兩個轉折點都在解除事件之後，才可以計數。
-    */
-    if (lastResetIndex >= p1) continue;
+    // 解除前的轉折點不能拿來建立新一輪背離。
+    if (lastResetIndex >= p1 || lastResetIndex >= p2) {
+      continue;
+    }
 
-    runCount++;
-
-    found.push({
+    // 有新的有效背離時，更新目前有效訊號。
+    // 不累計組數，也不保留已解除的舊訊號。
+    activeSignal = {
       symbol,
-      signal: isTop ? "MACD頂背離" : "MACD底背離",
-      count: runCount,
+      signal: isTop ? "MACD 頂背離" : "MACD 底背離",
       date1: dates[p1],
       date2: dates[p2],
       price1: prices[p1],
@@ -358,20 +372,28 @@ function findSignals(
       rsi: rsiValues[p2],
       rsiStatus: rsiStatus[p2],
       rsiDays: rsiDays[p2]
-    });
+    };
   }
 
-  if (found.length === 0) {
+  // 檢查最新已收盤 K 線之前是否已經觸碰零軸。
+  // 若已解除，就不把該背離顯示在結果中。
+  scanResets(scanCursor, dea.length - 1);
+
+  if (!activeSignal) {
     if (!hadGap) {
       audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
     } else if (!hadDivergence) {
       audit.reasons.push(name + "：配對不符合背離條件");
     } else {
-      audit.reasons.push(name + "：有符合背離條件的配對，但未形成有效輪次訊號");
+      audit.reasons.push(
+        name + "：背離已被 DEA 觸碰零軸解除，或尚未形成解除後的新背離"
+      );
     }
+
+    return [];
   }
 
-  return found;
+  return [activeSignal];
 }
 
 async function scanSymbol(symbol) {
@@ -389,6 +411,8 @@ async function scanSymbol(symbol) {
     }
 
     const now = Date.now();
+
+    // 只使用已收盤日線。
     const candles = raw.filter(
       x => Array.isArray(x) && Number(x[6]) < now
     );
@@ -404,6 +428,7 @@ async function scanSymbol(symbol) {
     const close = candles.map(x => Number(x[4]));
     const high = candles.map(x => Number(x[2]));
     const low = candles.map(x => Number(x[3]));
+
     const dates = candles.map(
       x => new Date(Number(x[0])).toISOString().slice(0, 10)
     );
@@ -412,6 +437,7 @@ async function scanSymbol(symbol) {
       throw Error("K 線包含無效價格");
     }
 
+    // MACD：DIF = EMA12 - EMA26；DEA = DIF 的 EMA9。
     const fast = ema(close, 12);
     const slow = ema(close, 26);
 
@@ -422,7 +448,10 @@ async function scanSymbol(symbol) {
     );
 
     const first = dif.findIndex(v => v !== null);
-    if (first < 0) throw Error("無法計算 DIF");
+
+    if (first < 0) {
+      throw Error("無法計算 DIF");
+    }
 
     const dea = Array(first).fill(null).concat(
       ema(dif.slice(first), 9)
@@ -434,6 +463,7 @@ async function scanSymbol(symbol) {
 
     for (const kind of ["high", "low"]) {
       const prices = kind === "high" ? high : low;
+
       const pp = pivots(prices, kind, 2, 2);
       const dp = pivots(dif, kind, 2, 2);
 
@@ -447,12 +477,24 @@ async function scanSymbol(symbol) {
 
       const pairs = pairPivots(pp, dp);
 
-      if (kind === "high") audit.highPairs = pairs.length;
-      else audit.lowPairs = pairs.length;
+      if (kind === "high") {
+        audit.highPairs = pairs.length;
+      } else {
+        audit.lowPairs = pairs.length;
+      }
 
       signals.push(...findSignals(
-        kind, pairs, prices, dif, dea, dates, audit, symbol,
-        rv, rs.status, rs.days
+        kind,
+        pairs,
+        prices,
+        dif,
+        dea,
+        dates,
+        audit,
+        symbol,
+        rv,
+        rs.status,
+        rs.days
       ));
     }
 
@@ -468,6 +510,7 @@ async function scanSymbol(symbol) {
   } catch (e) {
     audit.status = "請求失敗";
     audit.reasons.push(String(e.message || e));
+
     return { signals: [], audit };
   }
 }
@@ -487,6 +530,7 @@ function downloadCSV(name, headers, rows) {
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
+
   a.href = url;
   a.download = name;
   a.click();
@@ -503,19 +547,24 @@ function renderSignals() {
     a.symbol.localeCompare(b.symbol)
   );
 
+  if (!allSignals.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 3;
+    td.textContent = "目前沒有尚未解除的背離";
+
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+
   for (const x of allSignals) {
     const tr = document.createElement("tr");
-
     const vals = [
       x.symbol,
       x.signal,
-      "第 " + x.count + " 次",
-      `${x.date1} → ${x.date2}`,
-      `${x.price1} → ${x.price2}`,
-      `${x.dif1.toFixed(8)} → ${x.dif2.toFixed(8)}`,
-      x.rsi == null ? "—" : x.rsi.toFixed(1),
-      x.rsiStatus,
-      x.rsiDays ? `第 ${x.rsiDays} 天` : "—"
+      `${x.date1} → ${x.date2}`
     ];
 
     vals.forEach((v, i) => {
@@ -524,12 +573,6 @@ function renderSignals() {
 
       if (i === 1) {
         td.className = x.signal.includes("頂") ? "down" : "up";
-      }
-
-      if (i === 7) {
-        td.className = x.rsiStatus === "超買"
-          ? "down"
-          : x.rsiStatus === "超賣" ? "up" : "";
       }
 
       tr.appendChild(td);
@@ -562,10 +605,18 @@ function renderAudit() {
     const tr = document.createElement("tr");
 
     const vals = [
-      a.symbol, a.status, a.rawCandles, a.closedCandles,
-      a.priceHigh, a.priceLow, a.difHigh, a.difLow,
-      a.highPairs, a.lowPairs, a.candidateGroups,
-      a.signalCount, a.reasons.join("；") || "—"
+      a.symbol,
+      a.status,
+      a.rawCandles,
+      a.closedCandles,
+      a.priceHigh,
+      a.priceLow,
+      a.difHigh,
+      a.difLow,
+      a.highPairs,
+      a.lowPairs,
+      a.signalCount,
+      a.reasons.join("；") || "—"
     ];
 
     vals.forEach((v, i) => {
@@ -587,32 +638,58 @@ $("auditFilter").addEventListener("change", renderAudit);
 $("auditSearch").addEventListener("input", renderAudit);
 
 $("exportSignals").onclick = () => downloadCSV(
-  "macd_divergence_history.csv",
+  "macd_current_active_divergence.csv",
   [
-    "symbol", "signal", "consecutive_count", "date1", "date2",
-    "price1", "price2", "dif1", "dif2", "rsi",
-    "rsi_status", "rsi_days"
+    "symbol",
+    "signal",
+    "date1",
+    "date2",
+    "price1",
+    "price2",
+    "dif1",
+    "dif2"
   ],
   allSignals.map(x => [
-    x.symbol, x.signal, x.count, x.date1, x.date2,
-    x.price1, x.price2, x.dif1, x.dif2, x.rsi,
-    x.rsiStatus, x.rsiDays
+    x.symbol,
+    x.signal,
+    x.date1,
+    x.date2,
+    x.price1,
+    x.price2,
+    x.dif1,
+    x.dif2
   ])
 );
 
 $("exportAudit").onclick = () => downloadCSV(
   "macd_audit.csv",
   [
-    "symbol", "status", "rawCandles", "closedCandles",
-    "priceHigh", "priceLow", "difHigh", "difLow",
-    "highPairs", "lowPairs", "candidateGroups",
-    "signalCount", "reasons"
+    "symbol",
+    "status",
+    "rawCandles",
+    "closedCandles",
+    "priceHigh",
+    "priceLow",
+    "difHigh",
+    "difLow",
+    "highPairs",
+    "lowPairs",
+    "activeSignalCount",
+    "reasons"
   ],
   allAudit.map(a => [
-    a.symbol, a.status, a.rawCandles, a.closedCandles,
-    a.priceHigh, a.priceLow, a.difHigh, a.difLow,
-    a.highPairs, a.lowPairs, a.candidateGroups,
-    a.signalCount, a.reasons.join("；")
+    a.symbol,
+    a.status,
+    a.rawCandles,
+    a.closedCandles,
+    a.priceHigh,
+    a.priceLow,
+    a.difHigh,
+    a.difLow,
+    a.highPairs,
+    a.lowPairs,
+    a.signalCount,
+    a.reasons.join("；")
   ])
 );
 
@@ -648,7 +725,9 @@ $("scan").onclick = async () => {
 
     const total = symbols.length;
 
-    if (!total) throw Error("取得的合約清單為空，停止掃描");
+    if (!total) {
+      throw Error("取得的合約清單為空，停止掃描");
+    }
 
     for (let i = 0; i < total; i++) {
       const result = await scanSymbol(symbols[i]);
@@ -657,36 +736,22 @@ $("scan").onclick = async () => {
       allSignals.push(...result.signals);
 
       $("status").textContent =
-        `掃描進度：${i + 1}/${total}\n` +
-        `已完成紀錄：${allAudit.length}\n` +
-        `背離紀錄：${allSignals.length}\n` +
-        `請求失敗：${allAudit.filter(a => a.status === "請求失敗").length}\n` +
-        `資料不足：${allAudit.filter(a => a.status === "資料不足").length}`;
+        `掃描進度：${i + 1}/${total}｜目前有效背離：${allSignals.length}`;
 
       if ((i + 1) % 10 === 0 || i === total - 1) {
         renderAudit();
       }
 
-      if (i % 5 === 4) await sleep(250);
+      if (i % 5 === 4) {
+        await sleep(250);
+      }
     }
 
     renderSignals();
     renderAudit();
 
-    const ok = allAudit.filter(a => a.status === "成功完成").length;
-    const err = allAudit.filter(a => a.status === "請求失敗").length;
-    const short = allAudit.filter(a => a.status === "資料不足").length;
-
     $("status").textContent =
-      `掃描結束\n` +
-      `合約清單：${total}\n` +
-      `稽核紀錄：${allAudit.length}\n` +
-      `成功完成：${ok}\n` +
-      `請求失敗：${err}\n` +
-      `資料不足：${short}\n` +
-      `背離紀錄：${allSignals.length}\n` +
-      `紀錄數核對：${allAudit.length === total ? "一致" : "不一致"}\n` +
-      `提醒：紀錄完整不代表演算法已經過獨立驗證。`;
+      `掃描完成｜目前有效背離：${allSignals.length}｜掃描合約：${total}`;
 
     $("exportSignals").disabled = false;
     $("exportAudit").disabled = false;
