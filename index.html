@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -12,7 +13,7 @@ button{padding:12px 18px;border:0;border-radius:8px;background:#f0b90b;font-weig
 button:disabled{opacity:.5}
 #status{margin:16px 0;white-space:pre-wrap}
 table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px}
-th,td{padding:10px;border-bottom:1px solid #374151;text-align:left}
+th,td{padding:10px;border-bottom:1px solid #374151;text-align:left;white-space:nowrap}
 th{color:#f0b90b}
 .up{color:#34d399}
 .down{color:#fb7185}
@@ -24,27 +25,20 @@ small{color:#9ca3af}
 <main>
 <h1>幣安日K MACD 背離掃描器</h1>
 <p>掃描 USDT 本位永續合約｜只使用已收盤日K</p>
-
 <button id="scan">開始掃描</button>
 <div id="status">尚未開始</div>
-
 <div class="wrap">
 <table>
 <thead>
 <tr>
-<th>幣種</th>
-<th>訊號</th>
-<th>轉折日期</th>
-<th>價格變化</th>
-<th>DIF 變化</th>
-<th>RSI(14)</th>
+<th>幣種</th><th>訊號</th><th>轉折日期</th>
+<th>價格變化</th><th>DIF 變化</th><th>RSI(14)</th>
 </tr>
 </thead>
 <tbody id="results"></tbody>
 </table>
 </div>
-
-<small>公開行情、無交易功能。請求可能受幣安限流影響，訊號僅供參考。</small>
+<small>公開行情、無交易功能。訊號僅供參考；網路或交易所限流可能影響掃描結果。</small>
 </main>
 
 <script>
@@ -58,14 +52,12 @@ function ema(a, n) {
 
   let v = a.slice(0, n).reduce((x, y) => x + y, 0) / n;
   out[n - 1] = v;
-
   const k = 2 / (n + 1);
 
   for (let i = n; i < a.length; i++) {
     v = a[i] * k + v * (1 - k);
     out[i] = v;
   }
-
   return out;
 }
 
@@ -73,30 +65,23 @@ function rsi(a, n = 14) {
   const out = Array(a.length).fill(null);
   if (a.length <= n) return out;
 
-  let gain = 0;
-  let loss = 0;
+  let gain = 0, loss = 0;
 
   for (let i = 1; i <= n; i++) {
     const d = a[i] - a[i - 1];
-
     if (d > 0) gain += d;
     else loss -= d;
   }
 
-  let ag = gain / n;
-  let al = loss / n;
-
+  let ag = gain / n, al = loss / n;
   out[n] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
 
   for (let i = n + 1; i < a.length; i++) {
     const d = a[i] - a[i - 1];
-
     ag = (ag * (n - 1) + Math.max(d, 0)) / n;
     al = (al * (n - 1) + Math.max(-d, 0)) / n;
-
     out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
   }
-
   return out;
 }
 
@@ -104,38 +89,68 @@ function pivots(a, kind, left = 2, right = 2) {
   const out = [];
 
   for (let i = left; i < a.length - right; i++) {
-    if (a[i] === null) continue;
+    if (a[i] === null || !Number.isFinite(a[i])) continue;
 
     const w = a.slice(i - left, i + right + 1);
-    if (w.some(v => v === null)) continue;
+    if (w.some(v => v === null || !Number.isFinite(v))) continue;
 
-    if (
-      kind === "high" &&
-      a[i] === Math.max(...w) &&
-      w.filter(v => v === a[i]).length === 1
-    ) {
+    if (kind === "high" &&
+        a[i] === Math.max(...w) &&
+        w.filter(v => v === a[i]).length === 1) {
       out.push(i);
     }
 
-    if (
-      kind === "low" &&
-      a[i] === Math.min(...w) &&
-      w.filter(v => v === a[i]).length === 1
-    ) {
+    if (kind === "low" &&
+        a[i] === Math.min(...w) &&
+        w.filter(v => v === a[i]).length === 1) {
       out.push(i);
     }
   }
-
   return out;
+}
+
+/*
+ * 價格轉折配對 DIF 轉折：
+ * 1. 只接受日期差距在 ±2 根日K內的 DIF 轉折。
+ * 2. 每個價格轉折選擇日期最近的 DIF 轉折。
+ * 3. 同一個 DIF 轉折不能被重複使用。
+ * 4. 最後按價格轉折日期排序。
+ */
+function pairPivots(pricePivots, difPivots) {
+  const candidates = [];
+
+  for (const p of pricePivots) {
+    for (const d of difPivots) {
+      const distance = Math.abs(p - d);
+      if (distance <= 2) {
+        candidates.push({p, d, distance});
+      }
+    }
+  }
+
+  candidates.sort((a, b) =>
+    a.distance - b.distance || a.p - b.p || a.d - b.d
+  );
+
+  const usedPrice = new Set();
+  const usedDif = new Set();
+  const pairs = [];
+
+  for (const item of candidates) {
+    if (usedPrice.has(item.p) || usedDif.has(item.d)) continue;
+
+    usedPrice.add(item.p);
+    usedDif.add(item.d);
+    pairs.push([item.p, item.d]);
+  }
+
+  pairs.sort((a, b) => a[0] - b[0]);
+  return pairs;
 }
 
 async function getJSON(url) {
   const res = await fetch(url);
-
-  if (!res.ok) {
-    throw Error("HTTP " + res.status);
-  }
-
+  if (!res.ok) throw Error("HTTP " + res.status);
   return res.json();
 }
 
@@ -146,56 +161,38 @@ async function scanSymbol(symbol) {
 
   const now = Date.now();
 
-  // 只保留已收盤的日K
-  const c = raw.filter(x => Number(x[6]) < now);
+  // Binance K線第7欄是收盤時間；只採用已收盤K線。
+  const candles = raw.filter(x => Number(x[6]) < now);
+  if (candles.length < 80) return [];
 
-  if (c.length < 80) return [];
-
-  const close = c.map(x => +x[4]);
-  const high = c.map(x => +x[2]);
-  const low = c.map(x => +x[3]);
-  const date = c.map(x =>
-    new Date(+x[0]).toISOString().slice(0, 10)
+  const close = candles.map(x => Number(x[4]));
+  const high = candles.map(x => Number(x[2]));
+  const low = candles.map(x => Number(x[3]));
+  const dates = candles.map(x =>
+    new Date(Number(x[0])).toISOString().slice(0, 10)
   );
 
-  const f = ema(close, 12);
-  const s = ema(close, 26);
+  const fast = ema(close, 12);
+  const slowEma = ema(close, 26);
 
   const dif = close.map((_, i) =>
-    f[i] === null || s[i] === null
+    fast[i] === null || slowEma[i] === null
       ? null
-      : f[i] - s[i]
+      : fast[i] - slowEma[i]
   );
 
-  const first = dif.findIndex(v => v !== null);
-  const dt = ema(dif.slice(first), 9);
-  const dea = Array(first).fill(null).concat(dt);
-
-  const rv = rsi(close);
-  const out = [];
+  const firstDif = dif.findIndex(v => v !== null);
+  const deaTail = ema(dif.slice(firstDif), 9);
+  const dea = Array(firstDif).fill(null).concat(deaTail);
+  const rsiValues = rsi(close, 14);
+  const found = [];
 
   for (const kind of ["high", "low"]) {
     const prices = kind === "high" ? high : low;
 
-    const pp = pivots(prices, kind);
-    const dp = pivots(dif, kind);
-    const pairs = [];
-
-    for (const p of pp) {
-      const matches = dp.filter(d => Math.abs(d - p) <= 2);
-
-      if (matches.length) {
-        const d = matches.sort(
-          (a, b) => Math.abs(a - p) - Math.abs(b - p)
-        )[0];
-
-        if (!pairs.some(x => x[1] === d)) {
-          pairs.push([p, d]);
-        }
-      }
-    }
-
-    pairs.sort((a, b) => a[0] - b[0]);
+    const pricePivots = pivots(prices, kind, 2, 2);
+    const difPivots = pivots(dif, kind, 2, 2);
+    const pairs = pairPivots(pricePivots, difPivots);
 
     for (let j = pairs.length - 1; j > 0; j--) {
       const [p1, d1] = pairs[j - 1];
@@ -204,12 +201,12 @@ async function scanSymbol(symbol) {
 
       if (gap < 5 || gap > 60) continue;
 
-      let valid;
-      let signal;
-      let invalid;
+      let valid = false;
+      let invalid = false;
+      let signal = "";
 
       if (kind === "high") {
-        // 頂背離：價格高點更高，DIF 高點更低，DIF 均在零軸上方
+        // 頂背離：價格創高，DIF 高點降低，兩個 DIF 高點都在零軸上方。
         valid =
           high[p2] > high[p1] &&
           dif[d2] < dif[d1] &&
@@ -218,12 +215,13 @@ async function scanSymbol(symbol) {
 
         signal = "MACD頂背離";
 
-        // 第二個轉折後，DIF 與 DEA 都曾觸及或穿越零軸
+        // 第二個價格轉折之後，DIF 與 DEA 都曾到達或穿越零軸。
+        // 兩者不需要在同一根K線發生。
         invalid =
           dif.slice(p2 + 1).some(v => v !== null && v <= 0) &&
           dea.slice(p2 + 1).some(v => v !== null && v <= 0);
       } else {
-        // 底背離：價格低點更低，DIF 低點更高，DIF 均在零軸下方
+        // 底背離：價格創低，DIF 低點抬高，兩個 DIF 低點都在零軸下方。
         valid =
           low[p2] < low[p1] &&
           dif[d2] > dif[d1] &&
@@ -238,31 +236,34 @@ async function scanSymbol(symbol) {
       }
 
       if (valid && !invalid) {
-        out.push({
+        found.push({
           symbol,
           signal,
-          date1: date[p1],
-          date2: date[p2],
+          date1: dates[p1],
+          date2: dates[p2],
           price1: prices[p1],
           price2: prices[p2],
           dif1: dif[d1],
           dif2: dif[d2],
-          rsi: rv[p2]
+          rsi: rsiValues[p2]
         });
 
+        // 每個方向只保留最近找到的一組候選訊號。
         break;
       }
     }
   }
 
-  return out;
+  return found;
 }
 
 $("scan").onclick = async () => {
-  $("scan").disabled = true;
+  const button = $("scan");
+  button.disabled = true;
   $("results").innerHTML = "";
 
   const found = [];
+  let errors = 0;
 
   try {
     $("status").textContent = "正在取得合約清單……";
@@ -277,27 +278,21 @@ $("scan").onclick = async () => {
       )
       .map(s => s.symbol);
 
-    let completed = 0;
-    let errors = 0;
-
     for (let i = 0; i < symbols.length; i++) {
       $("status").textContent =
         `掃描中：${i + 1}/${symbols.length}\n` +
-        `已找到候選訊號：${found.length}\n` +
+        `候選訊號：${found.length}\n` +
         `失敗合約：${errors}`;
 
       try {
         found.push(...await scanSymbol(symbols[i]));
       } catch (e) {
         errors++;
-        console.warn(symbols[i], e);
+        console.warn("掃描失敗：", symbols[i], e);
       }
 
-      completed++;
-
-      if (i % 5 === 4) {
-        await sleep(250);
-      }
+      // 降低請求頻率，減少觸發限流的機會。
+      if (i % 5 === 4) await sleep(250);
     }
 
     found.sort((a, b) => b.date2.localeCompare(a.date2));
@@ -305,7 +300,7 @@ $("scan").onclick = async () => {
     for (const x of found) {
       const tr = document.createElement("tr");
 
-      const vals = [
+      const values = [
         x.symbol,
         x.signal,
         `${x.date1} → ${x.date2}`,
@@ -314,17 +309,13 @@ $("scan").onclick = async () => {
         x.rsi === null
           ? "—"
           : x.rsi.toFixed(1) +
-            (x.rsi >= 80
-              ? "（超買）"
-              : x.rsi <= 20
-                ? "（超賣）"
-                : "")
+            (x.rsi >= 80 ? "（超買）" :
+             x.rsi <= 20 ? "（超賣）" : "")
       ];
 
-      // 修正表格欄位顯示
-      vals.forEach((v, i) => {
+      values.forEach((value, i) => {
         const td = document.createElement("td");
-        td.textContent = v;
+        td.textContent = value;
 
         if (i === 1) {
           td.className = x.signal.includes("頂") ? "down" : "up";
@@ -338,15 +329,14 @@ $("scan").onclick = async () => {
 
     $("status").textContent =
       `掃描完成。合約數：${symbols.length}；` +
-      `候選訊號：${found.length}；` +
-      `失敗合約：${errors}`;
+      `候選訊號：${found.length}；失敗合約：${errors}`;
 
   } catch (e) {
     $("status").textContent =
       "掃描中止：" + e.message +
       "\n請稍後重試，或檢查瀏覽器是否允許連線幣安。";
   } finally {
-    $("scan").disabled = false;
+    button.disabled = false;
   }
 };
 </script>
