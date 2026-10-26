@@ -1,87 +1,273 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幣安 MACD 背離掃描器｜目前有效背離</title>
+<title>幣安 MACD 背離掃描器｜共振與資金費率</title>
+
 <style>
-body{margin:0;padding:20px;background:#111827;color:#e5e7eb;font-family:Arial,sans-serif}
-main{max-width:1500px;margin:auto}
-h1{font-size:24px}
-button{padding:11px 16px;border:0;border-radius:8px;background:#f0b90b;font-weight:bold;cursor:pointer;margin:4px}
-button:disabled{opacity:.5}
-#status{margin:16px 0;white-space:pre-wrap;line-height:1.7}
-.panel{background:#1f2937;padding:14px;border-radius:10px;margin:14px 0}
-.wrap{overflow:auto;max-height:65vh}
-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
-th,td{padding:9px;border-bottom:1px solid #374151;text-align:left;white-space:nowrap}
-.results-detail{display:none}
-th{color:#f0b90b;position:sticky;top:0;background:#111827}
-.up{color:#34d399}
-.down{color:#fb7185}
-.warn{color:#fbbf24}
-small{color:#9ca3af}
-input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px solid #4b5563;border-radius:6px}
+:root {
+  color-scheme: dark;
+  --bg: #111827;
+  --panel: #1f2937;
+  --line: #374151;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --yellow: #f0b90b;
+  --green: #34d399;
+  --red: #fb7185;
+  --orange: #fbbf24;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, "Microsoft JhengHei", sans-serif;
+}
+
+main {
+  max-width: 1500px;
+  margin: auto;
+}
+
+h1 { font-size: 24px; }
+
+button {
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: #111827;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 4px;
+}
+
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: var(--panel);
+  padding: 14px;
+  border-radius: 10px;
+  margin: 14px 0;
+}
+
+#status {
+  margin: 14px 4px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wrap {
+  overflow: auto;
+  max-height: 65vh;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--yellow);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.results-detail { display: none; }
+
+.up { color: var(--green); }
+.down { color: var(--red); }
+.warn { color: var(--orange); }
+.muted { color: var(--muted); }
+
+.badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  margin: 2px 3px 2px 0;
+  white-space: nowrap;
+}
+
+.resonance-good {
+  background: #064e3b;
+  color: #6ee7b7;
+  border: 1px solid #059669;
+}
+
+.resonance-none {
+  background: #374151;
+  color: #d1d5db;
+  border: 1px solid #6b7280;
+}
+
+.resonance-mismatch {
+  background: #78350f;
+  color: #fde68a;
+  border: 1px solid #d97706;
+}
+
+.resonance-error {
+  background: #7f1d1d;
+  color: #fecaca;
+  border: 1px solid #dc2626;
+}
+
+.funding-positive { color: var(--red); }
+.funding-negative { color: var(--green); }
+.funding-zero { color: var(--muted); }
+
+input, select {
+  padding: 9px;
+  margin: 4px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--yellow);
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.signal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+@media (max-width: 700px) {
+  body { padding: 10px; }
+  h1 { font-size: 20px; }
+  th, td { padding: 8px; }
+}
 </style>
 </head>
+
 <body>
 <main>
-<h1>幣安 MACD 背離掃描器｜目前有效背離</h1>
-<p>USDT 本位永續合約｜日線為主要篩選｜日線背離再確認 4 小時同方向共振｜只顯示仍有效訊號</p>
+<h1>幣安 MACD 背離掃描器</h1>
+
+<p>
+  日線有效背離｜4 小時同方向共振｜資金費率｜USDT 永續合約
+</p>
 
 <div class="panel">
-<button id="scan">開始掃描</button>
-<button id="exportSignals" disabled>匯出目前有效背離 CSV</button>
-<div id="status">尚未開始掃描</div>
+  <button id="scan">開始掃描</button>
+  <button id="exportSignals" disabled>匯出有效背離 CSV</button>
+
+  <div id="status">尚未開始掃描。</div>
+
+  <div class="note">
+    日線是主要篩選週期；只有日線存在有效背離時，才檢查 4 小時共振。
+    資金費率來自 Binance 公開行情 API。正資金費率通常代表多方支付空方，
+    負資金費率則通常代表空方支付多方。
+  </div>
 </div>
 
 <div class="panel">
-<strong>目前有效日線背離（頂／底分組排序；附 4 小時同方向共振確認）</strong>
-<div class="wrap">
-<table>
-<thead>
-<tr>
-<th>幣種</th><th>日線訊號／4H確認</th><th class="results-detail">本輪第幾次</th><th class="results-detail">轉折日期</th>
-<th class="results-detail">價格變化</th><th class="results-detail">DIF 變化</th><th class="results-detail">轉折日 RSI</th>
-<th class="results-detail">RSI 狀態</th><th class="results-detail">狀態持續天數</th>
-</tr>
-</thead>
-<tbody id="results"></tbody>
-</table>
-</div>
+  <strong>目前有效日線背離｜共振優先排序</strong>
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>幣種</th>
+          <th>背離／4H 共振</th>
+          <th>資金費率</th>
+          <th>下一次結算時間</th>
+          <th class="results-detail">背離日期</th>
+          <th class="results-detail">價格變化</th>
+          <th class="results-detail">DIF 變化</th>
+          <th class="results-detail">RSI</th>
+          <th class="results-detail">RSI 狀態</th>
+          <th class="results-detail">RSI 狀態天數</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
 </div>
 
 <details class="panel">
-<summary><strong>進階資訊：逐合約掃描稽核（點擊展開）</strong></summary>
-<button id="exportAudit" disabled>匯出稽核 CSV</button>
-<p><small>成功完成不代表一定有訊號；請同時查看資料筆數及排除原因。</small></p>
-<label>篩選：
-<select id="auditFilter">
-<option value="all">全部合約</option>
-<option value="ok">成功完成</option>
-<option value="error">請求失敗</option>
-<option value="insufficient">資料不足</option>
-<option value="signal">有訊號</option>
-<option value="none">無訊號</option>
-</select>
-</label>
-<input id="auditSearch" placeholder="搜尋合約，例如 BTCUSDT">
-<div class="wrap">
-<table>
-<thead>
-<tr>
-<th>合約</th><th>狀態</th><th>收到 K 線</th><th>已收盤 K 線</th>
-<th>價格高點</th><th>價格低點</th><th>DIF 高點</th><th>DIF 低點</th>
-<th>高點配對</th><th>低點配對</th><th>背離組數</th><th>訊號數</th>
-<th>排除／錯誤原因</th>
-</tr>
-</thead>
-<tbody id="auditResults"></tbody>
-</table>
-</div>
+  <summary><strong>進階資訊：逐合約掃描稽核（點擊展開）</strong></summary>
+
+  <button id="exportAudit" disabled>匯出稽核 CSV</button>
+
+  <p class="note">
+    這裡保留掃描狀態、資料筆數、配對數與排除原因。
+  </p>
+
+  <label for="auditFilter">篩選：</label>
+  <select id="auditFilter">
+    <option value="all">全部合約</option>
+    <option value="ok">成功完成</option>
+    <option value="error">請求失敗</option>
+    <option value="insufficient">資料不足</option>
+    <option value="signal">有日線訊號</option>
+    <option value="none">無日線訊號</option>
+  </select>
+
+  <input id="auditSearch" placeholder="搜尋合約，例如 BTCUSDT">
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>合約</th>
+          <th>狀態</th>
+          <th>收到 K 線</th>
+          <th>已收盤 K 線</th>
+          <th>價格高點</th>
+          <th>價格低點</th>
+          <th>DIF 高點</th>
+          <th>DIF 低點</th>
+          <th>高點配對</th>
+          <th>低點配對</th>
+          <th>背離組數</th>
+          <th>訊號數</th>
+          <th>排除／錯誤原因</th>
+        </tr>
+      </thead>
+      <tbody id="auditResults"></tbody>
+    </table>
+  </div>
 </details>
 
-<small>公開行情，沒有下單功能。訊號是依照設定的規則計算，不代表未來價格一定反轉。</small>
+<p class="note">
+  注意：背離及共振只是技術訊號，不保證價格反轉。
+  資金費率會隨市場變動；本程式只讀取公開資料，不會替你下單。
+</p>
 </main>
 
 <script>
@@ -89,70 +275,109 @@ input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px 
 
 const API = "https://fapi.binance.com";
 const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let allSignals = [];
 let allAudit = [];
+let fundingMap = new Map();
 let isRunning = false;
 
-function ema(a, n) {
-  const out = Array(a.length).fill(null);
-  if (a.length < n) return out;
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-  let v = a.slice(0, n).reduce((x, y) => x + y, 0) / n;
-  out[n - 1] = v;
-  const k = 2 / (n + 1);
+async function getJSON(url) {
+  const response = await fetch(url);
 
-  for (let i = n; i < a.length; i++) {
-    v = a[i] * k + v * (1 - k);
-    out[i] = v;
+  if (!response.ok) {
+    throw new Error("HTTP " + response.status);
+  }
+
+  return response.json();
+}
+
+/* EMA 指數移動平均 */
+function ema(values, period) {
+  const out = Array(values.length).fill(null);
+
+  if (values.length < period) return out;
+
+  let value = values.slice(0, period)
+    .reduce((sum, x) => sum + x, 0) / period;
+
+  out[period - 1] = value;
+
+  const k = 2 / (period + 1);
+
+  for (let i = period; i < values.length; i++) {
+    value = values[i] * k + value * (1 - k);
+    out[i] = value;
   }
 
   return out;
 }
 
-function rsi(a, n = 14) {
-  const out = Array(a.length).fill(null);
-  if (a.length <= n) return out;
+/* RSI */
+function rsi(values, period = 14) {
+  const out = Array(values.length).fill(null);
 
-  let g = 0, l = 0;
+  if (values.length <= period) return out;
 
-  for (let i = 1; i <= n; i++) {
-    const d = a[i] - a[i - 1];
-    if (d > 0) g += d;
-    else l -= d;
+  let gains = 0;
+  let losses = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const change = values[i] - values[i - 1];
+
+    if (change > 0) gains += change;
+    else losses -= change;
   }
 
-  let ag = g / n, al = l / n;
-  out[n] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
 
-  for (let i = n + 1; i < a.length; i++) {
-    const d = a[i] - a[i - 1];
-    ag = (ag * (n - 1) + Math.max(d, 0)) / n;
-    al = (al * (n - 1) + Math.max(-d, 0)) / n;
-    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  out[period] = avgLoss === 0
+    ? 100
+    : 100 - 100 / (1 + avgGain / avgLoss);
+
+  for (let i = period + 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+
+    avgGain =
+      (avgGain * (period - 1) + Math.max(change, 0)) / period;
+
+    avgLoss =
+      (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
+
+    out[i] = avgLoss === 0
+      ? 100
+      : 100 - 100 / (1 + avgGain / avgLoss);
   }
 
   return out;
 }
 
-function rsiStates(vals) {
-  const status = Array(vals.length).fill("一般");
-  const days = Array(vals.length).fill(0);
+/* RSI 狀態與連續天數／K 線數 */
+function rsiStates(values) {
+  const status = Array(values.length).fill("一般");
+  const days = Array(values.length).fill(0);
 
   let mode = "一般";
   let count = 0;
 
-  for (let i = 0; i < vals.length; i++) {
-    const v = vals[i];
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
 
-    if (v === null) {
+    if (value === null || !Number.isFinite(value)) {
       status[i] = "資料不足";
       days[i] = 0;
       continue;
     }
 
-    const next = v >= 80 ? "超買" : v <= 20 ? "超賣" : "一般";
+    const next = value >= 80
+      ? "超買"
+      : value <= 20
+        ? "超賣"
+        : "一般";
 
     if (next !== mode) {
       mode = next;
@@ -170,68 +395,75 @@ function rsiStates(vals) {
   return { status, days };
 }
 
-function pivots(a, kind, left = 2, right = 2) {
-  const out = [];
+/* 價格或 DIF 的局部高低點 */
+function pivots(values, kind, left = 2, right = 2) {
+  const result = [];
 
-  for (let i = left; i < a.length - right; i++) {
-    if (a[i] === null || !Number.isFinite(a[i])) continue;
+  for (let i = left; i < values.length - right; i++) {
+    const value = values[i];
 
-    const w = a.slice(i - left, i + right + 1);
-    if (w.some(v => v === null || !Number.isFinite(v))) continue;
+    if (value === null || !Number.isFinite(value)) continue;
 
-    if (
-      kind === "high" &&
-      a[i] === Math.max(...w) &&
-      w.filter(v => v === a[i]).length === 1
-    ) out.push(i);
+    const window = values.slice(i - left, i + right + 1);
 
-    if (
-      kind === "low" &&
-      a[i] === Math.min(...w) &&
-      w.filter(v => v === a[i]).length === 1
-    ) out.push(i);
+    if (window.some(v => v === null || !Number.isFinite(v))) {
+      continue;
+    }
+
+    const target = kind === "high"
+      ? Math.max(...window)
+      : Math.min(...window);
+
+    if (value !== target) continue;
+
+    if (window.filter(v => v === value).length !== 1) continue;
+
+    result.push(i);
   }
 
-  return out;
+  return result;
 }
 
+/* 將價格轉折點配對到附近的 DIF 轉折點 */
 function pairPivots(pricePivots, difPivots) {
-  const c = [];
+  const candidates = [];
 
   for (const p of pricePivots) {
     for (const d of difPivots) {
       const distance = Math.abs(p - d);
-      if (distance <= 2) c.push({ p, d, distance });
+
+      if (distance <= 2) {
+        candidates.push({ p, d, distance });
+      }
     }
   }
 
-  c.sort((a, b) =>
-    a.distance - b.distance || a.p - b.p || a.d - b.d
+  candidates.sort((a, b) =>
+    a.distance - b.distance ||
+    a.p - b.p ||
+    a.d - b.d
   );
 
-  const up = new Set();
-  const ud = new Set();
+  const usedPrice = new Set();
+  const usedDif = new Set();
   const pairs = [];
 
-  for (const x of c) {
-    if (up.has(x.p) || ud.has(x.d)) continue;
-    up.add(x.p);
-    ud.add(x.d);
-    pairs.push([x.p, x.d]);
+  for (const item of candidates) {
+    if (usedPrice.has(item.p) || usedDif.has(item.d)) continue;
+
+    usedPrice.add(item.p);
+    usedDif.add(item.d);
+
+    pairs.push([item.p, item.d]);
   }
 
   return pairs.sort((a, b) => a[0] - b[0]);
 }
 
-async function getJSON(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw Error("HTTP " + res.status);
-  return res.json();
-}
-
-function baseAudit(symbol) {
+function baseAudit(symbol, interval) {
   return {
     symbol,
+    interval,
     status: "處理中",
     rawCandles: 0,
     closedCandles: 0,
@@ -247,9 +479,33 @@ function baseAudit(symbol) {
   };
 }
 
+/*
+ * 背離有效條件：
+ *
+ * 頂背離：
+ * 1. 價格高點抬高
+ * 2. DIF 高點降低
+ * 3. 兩個 DIF 高點都在零軸上方
+ * 4. DEA 觸及或跌破零軸後解除舊訊號
+ *
+ * 底背離：
+ * 1. 價格低點降低
+ * 2. DIF 低點抬高
+ * 3. 兩個 DIF 低點都在零軸下方
+ * 4. DEA 觸及或突破零軸後解除舊訊號
+ */
 function findSignals(
-  kind, pairs, prices, dif, dea, dates, audit, symbol,
-  rsiValues, rsiStatus, rsiDays
+  kind,
+  pairs,
+  prices,
+  dif,
+  dea,
+  dates,
+  audit,
+  symbol,
+  rsiValues,
+  rsiStatus,
+  rsiDays
 ) {
   const name = kind === "high" ? "頂背離" : "底背離";
   const isTop = kind === "high";
@@ -262,23 +518,25 @@ function findSignals(
     return found;
   }
 
-  // 只保留目前有效的一筆；DEA 觸碰解除零軸時立即清空。
   let activeSignal = null;
   let lastResetIndex = -1;
   let scanCursor = 0;
   let hadGap = false;
   let hadDivergence = false;
 
-  // 頂背離：DEA <= 0 即為解除區；底背離：DEA >= 0 即為解除區。
-  // 掃描每一根 K 線，避免漏掉轉折點之間的零軸觸碰。
   function scanZeroAxis(from, to) {
-    for (let i = Math.max(0, from); i <= to && i < dea.length; i++) {
+    for (
+      let i = Math.max(0, from);
+      i <= to && i < dea.length;
+      i++
+    ) {
       const value = dea[i];
+
       if (value === null || !Number.isFinite(value)) continue;
 
-      const reachedResetSide = isTop ? value <= 0 : value >= 0;
+      const reset = isTop ? value <= 0 : value >= 0;
 
-      if (reachedResetSide) {
+      if (reset) {
         lastResetIndex = i;
         activeSignal = null;
       }
@@ -293,7 +551,9 @@ function findSignals(
     scanCursor = p2 + 1;
 
     const gap = p2 - p1;
+
     if (gap < 5 || gap > 60) continue;
+
     hadGap = true;
 
     const valid = isTop
@@ -307,10 +567,13 @@ function findSignals(
         dif[d2] < 0;
 
     if (!valid) continue;
+
     hadDivergence = true;
 
-    // 兩個轉折點都必須在最近一次 DEA 零軸解除事件之後。
-    if (p1 <= lastResetIndex || p2 <= lastResetIndex) continue;
+    /* 不允許重新使用零軸解除前的價格轉折點 */
+    if (p1 <= lastResetIndex || p2 <= lastResetIndex) {
+      continue;
+    }
 
     activeSignal = {
       symbol,
@@ -332,38 +595,41 @@ function findSignals(
 
   if (activeSignal) {
     found.push(activeSignal);
+  } else if (!hadGap) {
+    audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
+  } else if (!hadDivergence) {
+    audit.reasons.push(name + "：配對不符合背離條件");
   } else {
-    if (!hadGap) {
-      audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
-    } else if (!hadDivergence) {
-      audit.reasons.push(name + "：配對不符合背離條件");
-    } else {
-      audit.reasons.push(
-        name + "：背離已被 DEA 觸碰零軸解除，或解除後尚未形成新背離"
-      );
-    }
+    audit.reasons.push(
+      name + "：背離已被 DEA 零軸條件解除，或尚未形成新背離"
+    );
   }
 
   return found;
 }
 
+/* 掃描單一幣種的日線或 4 小時 K 線 */
 async function scanSymbol(symbol, interval = "1d") {
-  const audit = baseAudit(symbol);
+  const audit = baseAudit(symbol, interval);
 
   try {
-    const raw = await getJSON(
-      `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=240`
-    );
+    const url =
+      `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}` +
+      `&interval=${encodeURIComponent(interval)}&limit=240`;
 
-    audit.rawCandles = Array.isArray(raw) ? raw.length : 0;
+    const raw = await getJSON(url);
 
     if (!Array.isArray(raw)) {
-      throw Error("K 線回傳格式不是陣列");
+      throw new Error("K 線回傳格式不正確");
     }
 
+    audit.rawCandles = raw.length;
+
     const now = Date.now();
+
+    /* 只使用已收盤 K 線 */
     const candles = raw.filter(
-      x => Array.isArray(x) && Number(x[6]) < now
+      candle => Number(candle[6]) < now
     );
 
     audit.closedCandles = candles.length;
@@ -374,15 +640,18 @@ async function scanSymbol(symbol, interval = "1d") {
       return { signals: [], audit };
     }
 
-    const close = candles.map(x => Number(x[4]));
-    const high = candles.map(x => Number(x[2]));
-    const low = candles.map(x => Number(x[3]));
-    const dates = candles.map(
-      x => new Date(Number(x[0])).toISOString().slice(0, 10)
+    const close = candles.map(c => Number(c[4]));
+    const high = candles.map(c => Number(c[2]));
+    const low = candles.map(c => Number(c[3]));
+
+    const dates = candles.map(c =>
+      new Date(Number(c[0])).toISOString().slice(0, 10)
     );
 
-    if ([...close, ...high, ...low].some(v => !Number.isFinite(v))) {
-      throw Error("K 線包含無效價格");
+    if (
+      [...close, ...high, ...low].some(v => !Number.isFinite(v))
+    ) {
+      throw new Error("K 線包含無效價格");
     }
 
     const fast = ema(close, 12);
@@ -395,37 +664,50 @@ async function scanSymbol(symbol, interval = "1d") {
     );
 
     const first = dif.findIndex(v => v !== null);
-    if (first < 0) throw Error("無法計算 DIF");
+
+    if (first < 0) {
+      throw new Error("無法計算 DIF");
+    }
 
     const dea = Array(first).fill(null).concat(
       ema(dif.slice(first), 9)
     );
 
-    const rv = rsi(close, 14);
-    const rs = rsiStates(rv);
+    const rsiValues = rsi(close, 14);
+    const states = rsiStates(rsiValues);
     const signals = [];
 
     for (const kind of ["high", "low"]) {
-      const prices = kind === "high" ? high : low;
-      const pp = pivots(prices, kind, 2, 2);
-      const dp = pivots(dif, kind, 2, 2);
+      const priceValues = kind === "high" ? high : low;
+
+      const pricePivots = pivots(priceValues, kind, 2, 2);
+      const difPivots = pivots(dif, kind, 2, 2);
 
       if (kind === "high") {
-        audit.priceHigh = pp.length;
-        audit.difHigh = dp.length;
+        audit.priceHigh = pricePivots.length;
+        audit.difHigh = difPivots.length;
       } else {
-        audit.priceLow = pp.length;
-        audit.difLow = dp.length;
+        audit.priceLow = pricePivots.length;
+        audit.difLow = difPivots.length;
       }
 
-      const pairs = pairPivots(pp, dp);
+      const pairs = pairPivots(pricePivots, difPivots);
 
       if (kind === "high") audit.highPairs = pairs.length;
       else audit.lowPairs = pairs.length;
 
       signals.push(...findSignals(
-        kind, pairs, prices, dif, dea, dates, audit, symbol,
-        rv, rs.status, rs.days
+        kind,
+        pairs,
+        priceValues,
+        dif,
+        dea,
+        dates,
+        audit,
+        symbol,
+        rsiValues,
+        states.status,
+        states.days
       ));
     }
 
@@ -438,21 +720,91 @@ async function scanSymbol(symbol, interval = "1d") {
 
     return { signals, audit };
 
-  } catch (e) {
+  } catch (error) {
     audit.status = "請求失敗";
-    audit.reasons.push(String(e.message || e));
+    audit.reasons.push(String(error.message || error));
+
     return { signals: [], audit };
   }
 }
 
-function esc(v) {
-  return '"' + String(v ?? "").replace(/"/g, '""') + '"';
+/*
+ * 取得所有 USDT 永續合約的最新資金費率。
+ * premiumIndex 公開行情包含 lastFundingRate 與 nextFundingTime。
+ */
+async function loadFundingRates() {
+  const data = await getJSON(API + "/fapi/v1/premiumIndex");
+
+  if (!Array.isArray(data)) {
+    throw new Error("資金費率 API 回傳格式不正確");
+  }
+
+  const nextMap = new Map();
+
+  for (const item of data) {
+    if (!item.symbol) continue;
+
+    const rate = Number(item.lastFundingRate);
+    const nextTime = Number(item.nextFundingTime);
+
+    nextMap.set(item.symbol, {
+      rate: Number.isFinite(rate) ? rate : null,
+      nextTime: Number.isFinite(nextTime) ? nextTime : null
+    });
+  }
+
+  fundingMap = nextMap;
 }
 
-function downloadCSV(name, headers, rows) {
-  const content = "\uFEFF" + [headers, ...rows]
-    .map(r => r.map(esc).join(","))
-    .join("\r\n");
+/* 資金費率轉換為百分比字串 */
+function formatFunding(symbol) {
+  const item = fundingMap.get(symbol);
+
+  if (!item || item.rate === null) {
+    return {
+      text: "暫無資料",
+      className: "muted",
+      nextTime: item?.nextTime || null
+    };
+  }
+
+  const percentage = item.rate * 100;
+
+  return {
+    text: (percentage > 0 ? "+" : "") + percentage.toFixed(4) + "%",
+    className: percentage > 0
+      ? "funding-positive"
+      : percentage < 0
+        ? "funding-negative"
+        : "funding-zero",
+    nextTime: item.nextTime
+  };
+}
+
+function formatNextTime(timestamp) {
+  if (!timestamp) return "—";
+
+  return new Date(timestamp).toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+}
+
+/* CSV 欄位跳脫 */
+function esc(value) {
+  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
+}
+
+function downloadCSV(filename, headers, rows) {
+  const content = "\uFEFF" +
+    [headers, ...rows]
+      .map(row => row.map(esc).join(","))
+      .join("\r\n");
 
   const blob = new Blob([content], {
     type: "text/csv;charset=utf-8;"
@@ -460,18 +812,20 @@ function downloadCSV(name, headers, rows) {
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
+
   a.href = url;
-  a.download = name;
+  a.download = filename;
   a.click();
 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/* 顯示主搜尋結果 */
 function renderSignals() {
   const body = $("results");
   body.replaceChildren();
 
-  // 頂背離集中、底背離集中；同組內共振訊號排前面。
+  /* 頂背離與底背離分組；同方向共振優先 */
   allSignals.sort((a, b) => {
     const directionA = a.signal.includes("頂") ? 0 : 1;
     const directionB = b.signal.includes("頂") ? 0 : 1;
@@ -482,78 +836,144 @@ function renderSignals() {
       b.date2.localeCompare(a.date2);
   });
 
-  for (const x of allSignals) {
+  for (const item of allSignals) {
     const tr = document.createElement("tr");
 
-    const vals = [
-      x.symbol,
-      x.displaySignal || x.signal,
-      "第 " + x.count + " 次",
-      `${x.date1} → ${x.date2}`,
-      `${x.price1} → ${x.price2}`,
-      `${x.dif1.toFixed(8)} → ${x.dif2.toFixed(8)}`,
-      x.rsi == null ? "—" : x.rsi.toFixed(1),
-      x.rsiStatus,
-      x.rsiDays ? `第 ${x.rsiDays} 天` : "—"
+    /* 幣種 */
+    const symbolCell = document.createElement("td");
+    symbolCell.textContent = item.symbol;
+    tr.appendChild(symbolCell);
+
+    /* 背離與共振標籤 */
+    const signalCell = document.createElement("td");
+    signalCell.className = "signal-cell";
+
+    const signalText = document.createElement("span");
+    signalText.className =
+      item.signal.includes("頂") ? "down" : "up";
+    signalText.textContent = item.signal.replace("MACD", "");
+
+    signalCell.appendChild(signalText);
+
+    const badge = document.createElement("span");
+    badge.className = "badge";
+
+    if (item.resonance === "4H 同方向共振") {
+      badge.classList.add("resonance-good");
+      badge.textContent = "4H 同方向共振";
+    } else if (item.resonance === "4H 方向不一致") {
+      badge.classList.add("resonance-mismatch");
+      badge.textContent = "4H 方向不一致";
+    } else if (item.resonance === "4H 資料失敗") {
+      badge.classList.add("resonance-error");
+      badge.textContent = "4H 資料失敗";
+    } else if (item.resonance === "4H 資料不足") {
+      badge.classList.add("resonance-error");
+      badge.textContent = "4H 資料不足";
+    } else {
+      badge.classList.add("resonance-none");
+      badge.textContent = "4H 未共振";
+    }
+
+    signalCell.appendChild(badge);
+    tr.appendChild(signalCell);
+
+    /* 資金費率 */
+    const funding = formatFunding(item.symbol);
+
+    const fundingCell = document.createElement("td");
+    const fundingText = document.createElement("span");
+
+    fundingText.className = funding.className;
+    fundingText.textContent = funding.text;
+    fundingCell.appendChild(fundingText);
+
+    const fundingNote = document.createElement("div");
+    fundingNote.className = "note";
+    fundingNote.textContent = "最新已公布費率";
+    fundingCell.appendChild(fundingNote);
+
+    tr.appendChild(fundingCell);
+
+    /* 下一次資金費率結算時間 */
+    const timeCell = document.createElement("td");
+    timeCell.textContent = formatNextTime(funding.nextTime);
+    tr.appendChild(timeCell);
+
+    /* 詳細資料：預設隱藏 */
+    const details = [
+      `${item.date1} → ${item.date2}`,
+      `${item.price1} → ${item.price2}`,
+      `${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)}`,
+      item.rsi == null ? "—" : item.rsi.toFixed(1),
+      item.rsiStatus,
+      item.rsiDays ? `第 ${item.rsiDays} 根 K 線` : "—"
     ];
 
-    vals.forEach((v, i) => {
+    for (const value of details) {
       const td = document.createElement("td");
-      td.textContent = v;
-
-      if (i >= 2) td.classList.add("results-detail");
-
-      if (i === 1) {
-        td.className = x.signal.includes("頂") ? "down" : "up";
-      }
-
-      if (i === 7) {
-        if (x.rsiStatus === "超買") td.classList.add("down");
-        else if (x.rsiStatus === "超賣") td.classList.add("up");
-      }
-
+      td.className = "results-detail";
+      td.textContent = value;
       tr.appendChild(td);
-    });
+    }
 
     body.appendChild(tr);
   }
 }
 
+/* 顯示逐合約稽核 */
 function renderAudit() {
   const body = $("auditResults");
   body.replaceChildren();
 
-  const f = $("auditFilter").value;
-  const s = $("auditSearch").value.trim().toUpperCase();
+  const filter = $("auditFilter").value;
+  const search = $("auditSearch").value.trim().toUpperCase();
 
-  const rows = allAudit.filter(a =>
-    (!s || a.symbol.includes(s)) &&
-    (
-      f === "all" ||
-      (f === "ok" && a.status === "成功完成") ||
-      (f === "error" && a.status === "請求失敗") ||
-      (f === "insufficient" && a.status === "資料不足") ||
-      (f === "signal" && a.signalCount > 0) ||
-      (f === "none" && a.signalCount === 0 && a.status === "成功完成")
-    )
-  );
+  const rows = allAudit.filter(audit => {
+    const matchesSearch =
+      !search || audit.symbol.includes(search);
 
-  for (const a of rows) {
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "ok" && audit.status === "成功完成") ||
+      (filter === "error" && audit.status === "請求失敗") ||
+      (filter === "insufficient" && audit.status === "資料不足") ||
+      (filter === "signal" && audit.signalCount > 0) ||
+      (
+        filter === "none" &&
+        audit.signalCount === 0 &&
+        audit.status === "成功完成"
+      );
+
+    return matchesSearch && matchesFilter;
+  });
+
+  for (const audit of rows) {
     const tr = document.createElement("tr");
 
-    const vals = [
-      a.symbol, a.status, a.rawCandles, a.closedCandles,
-      a.priceHigh, a.priceLow, a.difHigh, a.difLow,
-      a.highPairs, a.lowPairs, a.candidateGroups,
-      a.signalCount, a.reasons.join("；") || "—"
+    const values = [
+      audit.symbol,
+      audit.status,
+      audit.rawCandles,
+      audit.closedCandles,
+      audit.priceHigh,
+      audit.priceLow,
+      audit.difHigh,
+      audit.difLow,
+      audit.highPairs,
+      audit.lowPairs,
+      audit.candidateGroups,
+      audit.signalCount,
+      audit.reasons.join("；") || "—"
     ];
 
-    vals.forEach((v, i) => {
+    values.forEach((value, index) => {
       const td = document.createElement("td");
-      td.textContent = v;
+      td.textContent = value;
 
-      if (i === 1) {
-        td.className = a.status === "成功完成" ? "up" : "warn";
+      if (index === 1) {
+        td.className =
+          audit.status === "成功完成" ? "up" : "warn";
       }
 
       tr.appendChild(td);
@@ -566,138 +986,243 @@ function renderAudit() {
 $("auditFilter").addEventListener("change", renderAudit);
 $("auditSearch").addEventListener("input", renderAudit);
 
-$("exportSignals").onclick = () => downloadCSV(
-  "macd_current_active_divergence.csv",
-  [
-    "symbol", "daily_signal", "4h_confirmation", "consecutive_count", "date1", "date2",
-    "price1", "price2", "dif1", "dif2", "rsi",
-    "rsi_status", "rsi_days"
-  ],
-  allSignals.map(x => [
-    x.symbol, x.signal, x.resonance || "尚未確認", x.count, x.date1, x.date2,
-    x.price1, x.price2, x.dif1, x.dif2, x.rsi,
-    x.rsiStatus, x.rsiDays
-  ])
-);
+/* 匯出有效背離及資金費率 */
+$("exportSignals").addEventListener("click", () => {
+  downloadCSV(
+    "macd_divergence_funding_rates.csv",
+    [
+      "symbol",
+      "daily_signal",
+      "4h_confirmation",
+      "funding_rate_percent",
+      "next_funding_time",
+      "date1",
+      "date2",
+      "price1",
+      "price2",
+      "dif1",
+      "dif2",
+      "rsi",
+      "rsi_status",
+      "rsi_days"
+    ],
+    allSignals.map(item => {
+      const funding = formatFunding(item.symbol);
 
-$("exportAudit").onclick = () => downloadCSV(
-  "macd_audit.csv",
-  [
-    "symbol", "status", "rawCandles", "closedCandles",
-    "priceHigh", "priceLow", "difHigh", "difLow",
-    "highPairs", "lowPairs", "candidateGroups",
-    "signalCount", "reasons"
-  ],
-  allAudit.map(a => [
-    a.symbol, a.status, a.rawCandles, a.closedCandles,
-    a.priceHigh, a.priceLow, a.difHigh, a.difLow,
-    a.highPairs, a.lowPairs, a.candidateGroups,
-    a.signalCount, a.reasons.join("；")
-  ])
-);
+      return [
+        item.symbol,
+        item.signal,
+        item.resonance || "尚未確認",
+        funding.text,
+        formatNextTime(funding.nextTime),
+        item.date1,
+        item.date2,
+        item.price1,
+        item.price2,
+        item.dif1,
+        item.dif2,
+        item.rsi,
+        item.rsiStatus,
+        item.rsiDays
+      ];
+    })
+  );
+});
 
-$("scan").onclick = async () => {
+/* 匯出稽核 */
+$("exportAudit").addEventListener("click", () => {
+  downloadCSV(
+    "macd_scanner_audit.csv",
+    [
+      "symbol",
+      "interval",
+      "status",
+      "rawCandles",
+      "closedCandles",
+      "priceHigh",
+      "priceLow",
+      "difHigh",
+      "difLow",
+      "highPairs",
+      "lowPairs",
+      "candidateGroups",
+      "signalCount",
+      "reasons"
+    ],
+    allAudit.map(audit => [
+      audit.symbol,
+      audit.interval,
+      audit.status,
+      audit.rawCandles,
+      audit.closedCandles,
+      audit.priceHigh,
+      audit.priceLow,
+      audit.difHigh,
+      audit.difLow,
+      audit.highPairs,
+      audit.lowPairs,
+      audit.candidateGroups,
+      audit.signalCount,
+      audit.reasons.join("；")
+    ])
+  );
+});
+
+/* 開始掃描 */
+$("scan").addEventListener("click", async () => {
   if (isRunning) return;
 
   isRunning = true;
+
   $("scan").disabled = true;
   $("exportSignals").disabled = true;
   $("exportAudit").disabled = true;
+
   $("results").replaceChildren();
   $("auditResults").replaceChildren();
 
   allSignals = [];
   allAudit = [];
+  fundingMap = new Map();
+
+  let fundingError = null;
 
   try {
-    $("status").textContent = "正在取得最新合約清單……";
+    $("status").textContent = "正在取得 Binance 合約清單……";
 
     const info = await getJSON(API + "/fapi/v1/exchangeInfo");
 
     if (!info || !Array.isArray(info.symbols)) {
-      throw Error("交易所合約清單格式不正確，停止掃描");
+      throw new Error("合約清單格式不正確，停止掃描");
     }
 
     const symbols = info.symbols
-      .filter(s =>
-        s.status === "TRADING" &&
-        s.contractType === "PERPETUAL" &&
-        s.quoteAsset === "USDT"
+      .filter(item =>
+        item.status === "TRADING" &&
+        item.contractType === "PERPETUAL" &&
+        item.quoteAsset === "USDT"
       )
-      .map(s => s.symbol);
+      .map(item => item.symbol);
+
+    if (!symbols.length) {
+      throw new Error("沒有取得可掃描的 USDT 永續合約");
+    }
+
+    /* 資金費率只需一次批次請求 */
+    $("status").textContent = "正在取得最新資金費率……";
+
+    try {
+      await loadFundingRates();
+    } catch (error) {
+      fundingError = String(error.message || error);
+    }
 
     const total = symbols.length;
 
-    if (!total) throw Error("取得的合約清單為空，停止掃描");
-
     for (let i = 0; i < total; i++) {
-      // 日線為主要篩選：只有日線存在有效背離，才額外掃描 4 小時。
-      const dailyResult = await scanSymbol(symbols[i], "1d");
-      allAudit.push(dailyResult.audit);
+      const symbol = symbols[i];
 
-      if (dailyResult.signals.length) {
-        const fourHourResult = await scanSymbol(symbols[i], "4h");
-        const fourHourSignals = fourHourResult.signals;
+      /* 第一步：日線 */
+      const daily = await scanSymbol(symbol, "1d");
+      allAudit.push(daily.audit);
 
-        for (const dailySignal of dailyResult.signals) {
-          const sameDirection = fourHourSignals.some(
-            x => x.signal === dailySignal.signal
-          );
+      if (daily.signals.length) {
+        /*
+         * 第二步：只有日線有有效背離，
+         * 才額外掃描 4 小時確認。
+         */
+        const fourHour = await scanSymbol(symbol, "4h");
 
-          const oppositeDirection = fourHourSignals.some(
-            x => x.signal !== dailySignal.signal
-          );
+        for (const dailySignal of daily.signals) {
+          if (
+            fourHour.audit.status === "請求失敗"
+          ) {
+            dailySignal.resonance = "4H 資料失敗";
+            dailySignal.resonanceRank = -1;
 
-          if (sameDirection) {
-            dailySignal.resonance = "4H 同方向共振";
-            dailySignal.displaySignal =
-              dailySignal.signal.replace("MACD", "") + "｜4H 同方向共振";
-            dailySignal.resonanceRank = 2;
-          } else if (oppositeDirection) {
-            dailySignal.resonance = "4H 方向不一致";
-            dailySignal.displaySignal =
-              dailySignal.signal.replace("MACD", "") + "｜4H 方向不一致";
-            dailySignal.resonanceRank = 0;
+          } else if (
+            fourHour.audit.status === "資料不足"
+          ) {
+            dailySignal.resonance = "4H 資料不足";
+            dailySignal.resonanceRank = -1;
+
           } else {
-            dailySignal.resonance = "4H 無同方向背離";
-            dailySignal.displaySignal =
-              dailySignal.signal.replace("MACD", "") + "｜4H 未共振";
-            dailySignal.resonanceRank = 1;
-          }
-        }
+            const sameDirection = fourHour.signals.some(
+              signal => signal.signal === dailySignal.signal
+            );
 
-        allSignals.push(...dailyResult.signals);
+            const oppositeDirection = fourHour.signals.some(
+              signal => signal.signal !== dailySignal.signal
+            );
+
+            if (sameDirection) {
+              dailySignal.resonance = "4H 同方向共振";
+              dailySignal.resonanceRank = 2;
+
+            } else if (oppositeDirection) {
+              dailySignal.resonance = "4H 方向不一致";
+              dailySignal.resonanceRank = 0;
+
+            } else {
+              dailySignal.resonance = "4H 未共振";
+              dailySignal.resonanceRank = 1;
+            }
+          }
+
+          allSignals.push(dailySignal);
+        }
       }
+
+      if ((i + 1) % 5 === 0 || i === total - 1) {
+        renderAudit();
+        renderSignals();
+      }
+
+      const resonanceCount = allSignals.filter(
+        item => item.resonance === "4H 同方向共振"
+      ).length;
 
       $("status").textContent =
-        `掃描進度：${i + 1}/${total}｜日線有效背離：${allSignals.length}｜4H 共振：${allSignals.filter(x => x.resonanceRank === 2).length}`;
+        `掃描進度：${i + 1}/${total}` +
+        `\n日線有效背離：${allSignals.length}` +
+        `\n4H 同方向共振：${resonanceCount}` +
+        `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
 
-      if ((i + 1) % 10 === 0 || i === total - 1) {
-        renderAudit();
-      }
-
-      if (i % 5 === 4) await sleep(250);
+      /* 稍微放慢請求速度 */
+      await sleep(120);
     }
 
     renderSignals();
     renderAudit();
 
+    const resonanceCount = allSignals.filter(
+      item => item.resonance === "4H 同方向共振"
+    ).length;
+
+    const mismatchCount = allSignals.filter(
+      item => item.resonance === "4H 方向不一致"
+    ).length;
+
     $("status").textContent =
-      `掃描完成｜日線有效背離：${allSignals.length}｜4H 同方向共振：${allSignals.filter(x => x.resonanceRank === 2).length}｜4H 未共振／方向不一致：${allSignals.filter(x => x.resonanceRank !== 2).length}`;
+      `掃描完成` +
+      `\n日線有效背離：${allSignals.length}` +
+      `\n4H 同方向共振：${resonanceCount}` +
+      `\n4H 方向不一致：${mismatchCount}` +
+      `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
 
     $("exportSignals").disabled = false;
     $("exportAudit").disabled = false;
 
-  } catch (e) {
+  } catch (error) {
     $("status").textContent =
-      "掃描中止：" + String(e.message || e) +
-      "\n請檢查網路連線與 Binance API 狀態。";
+      "掃描中止：" + String(error.message || error) +
+      "\n請檢查網路連線、瀏覽器限制或 Binance API 狀態。";
 
   } finally {
     isRunning = false;
     $("scan").disabled = false;
   }
-};
+});
 </script>
 </body>
 </html>
