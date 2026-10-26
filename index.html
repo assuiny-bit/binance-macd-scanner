@@ -1,13 +1,12 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>幣安 MACD 背離掃描器｜稽核版</title>
+<title>幣安 MACD 背離掃描器｜連續背離版</title>
 <style>
 body{margin:0;padding:20px;background:#111827;color:#e5e7eb;font-family:Arial,sans-serif}
-main{max-width:1400px;margin:auto}
+main{max-width:1500px;margin:auto}
 h1{font-size:24px}
 button{padding:11px 16px;border:0;border-radius:8px;background:#f0b90b;font-weight:bold;cursor:pointer;margin:4px}
 button:disabled{opacity:.5}
@@ -17,66 +16,71 @@ button:disabled{opacity:.5}
 table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
 th,td{padding:9px;border-bottom:1px solid #374151;text-align:left;white-space:nowrap}
 th{color:#f0b90b;position:sticky;top:0;background:#111827}
-.up{color:#34d399}.down{color:#fb7185}.warn{color:#fbbf24}
+.up{color:#34d399}
+.down{color:#fb7185}
+.warn{color:#fbbf24}
 small{color:#9ca3af}
 input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px solid #4b5563;border-radius:6px}
 </style>
 </head>
 <body>
 <main>
-<h1>幣安 MACD 背離掃描器｜稽核版</h1>
-<p>動態 USDT 本位永續合約｜已收盤日 K｜逐幣稽核｜CSV 匯出</p>
+<h1>幣安 MACD 背離掃描器｜連續背離版</h1>
+<p>USDT 本位永續合約｜日線已收盤 K｜連續背離紀錄｜DEA 零軸解除｜RSI 狀態與天數｜CSV 匯出</p>
 
 <div class="panel">
-  <button id="scan">開始掃描</button>
-  <button id="exportSignals" disabled>匯出訊號 CSV</button>
-  <button id="exportAudit" disabled>匯出稽核 CSV</button>
-  <div id="status">尚未開始掃描</div>
+<button id="scan">開始掃描</button>
+<button id="exportSignals" disabled>匯出背離紀錄 CSV</button>
+<button id="exportAudit" disabled>匯出稽核 CSV</button>
+<div id="status">尚未開始掃描</div>
 </div>
 
 <div class="panel">
-  <strong>訊號結果</strong>
-  <div class="wrap">
-  <table>
-  <thead><tr>
-    <th>幣種</th><th>訊號</th><th>轉折日期</th>
-    <th>價格變化</th><th>DIF 變化</th><th>RSI</th>
-  </tr></thead>
-  <tbody id="results"></tbody>
-  </table>
-  </div>
+<strong>背離紀錄（每一組符合條件的背離各列一筆）</strong>
+<div class="wrap">
+<table>
+<thead>
+<tr>
+<th>幣種</th><th>訊號</th><th>本輪第幾次</th><th>轉折日期</th>
+<th>價格變化</th><th>DIF 變化</th><th>轉折日 RSI</th>
+<th>RSI 狀態</th><th>狀態持續天數</th>
+</tr>
+</thead>
+<tbody id="results"></tbody>
+</table>
+</div>
 </div>
 
 <div class="panel">
-  <strong>逐合約掃描稽核</strong>
-  <p><small>成功完成不代表一定有訊號；請同時查看資料筆數及排除原因。</small></p>
-  <label>篩選：
-    <select id="auditFilter">
-      <option value="all">全部合約</option>
-      <option value="ok">成功完成</option>
-      <option value="error">請求失敗</option>
-      <option value="insufficient">資料不足</option>
-      <option value="signal">有訊號</option>
-      <option value="none">無訊號</option>
-    </select>
-  </label>
-  <input id="auditSearch" placeholder="搜尋合約，例如 BTCUSDT">
-  <div class="wrap">
-  <table>
-  <thead><tr>
-    <th>合約</th><th>狀態</th><th>收到 K 線</th>
-    <th>已收盤 K 線</th><th>高點轉折</th><th>低點轉折</th>
-    <th>DIF 高點</th><th>DIF 低點</th><th>高點配對</th>
-    <th>低點配對</th><th>候選組數</th><th>訊號數</th><th>排除／錯誤原因</th>
-  </tr></thead>
-  <tbody id="auditResults"></tbody>
-  </table>
-  </div>
+<strong>逐合約掃描稽核</strong>
+<p><small>成功完成不代表一定有訊號；請同時查看資料筆數及排除原因。</small></p>
+<label>篩選：
+<select id="auditFilter">
+<option value="all">全部合約</option>
+<option value="ok">成功完成</option>
+<option value="error">請求失敗</option>
+<option value="insufficient">資料不足</option>
+<option value="signal">有訊號</option>
+<option value="none">無訊號</option>
+</select>
+</label>
+<input id="auditSearch" placeholder="搜尋合約，例如 BTCUSDT">
+<div class="wrap">
+<table>
+<thead>
+<tr>
+<th>合約</th><th>狀態</th><th>收到 K 線</th><th>已收盤 K 線</th>
+<th>價格高點</th><th>價格低點</th><th>DIF 高點</th><th>DIF 低點</th>
+<th>高點配對</th><th>低點配對</th><th>背離組數</th><th>訊號數</th>
+<th>排除／錯誤原因</th>
+</tr>
+</thead>
+<tbody id="auditResults"></tbody>
+</table>
+</div>
 </div>
 
-<small>
-公開行情，沒有下單功能。稽核紀錄用於追蹤程式執行狀況，不代表訊號已經過人工或獨立演算法驗證。
-</small>
+<small>公開行情，沒有下單功能。訊號是依照設定的規則計算，不代表未來價格一定反轉。</small>
 </main>
 
 <script>
@@ -84,7 +88,7 @@ input,select{padding:8px;margin:4px;background:#111827;color:#e5e7eb;border:1px 
 
 const API = "https://fapi.binance.com";
 const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let allSignals = [];
 let allAudit = [];
@@ -94,415 +98,574 @@ function ema(a, n) {
   const out = Array(a.length).fill(null);
   if (a.length < n) return out;
 
-  let v = a.slice(0,n).reduce((x,y)=>x+y,0)/n;
-  out[n-1] = v;
-  const k = 2/(n+1);
+  let v = a.slice(0, n).reduce((x, y) => x + y, 0) / n;
+  out[n - 1] = v;
+  const k = 2 / (n + 1);
 
-  for(let i=n;i<a.length;i++){
-    v = a[i]*k+v*(1-k);
+  for (let i = n; i < a.length; i++) {
+    v = a[i] * k + v * (1 - k);
     out[i] = v;
   }
+
   return out;
 }
 
-function rsi(a,n=14){
-  const out=Array(a.length).fill(null);
-  if(a.length<=n)return out;
+function rsi(a, n = 14) {
+  const out = Array(a.length).fill(null);
+  if (a.length <= n) return out;
 
-  let gain=0,loss=0;
-  for(let i=1;i<=n;i++){
-    const d=a[i]-a[i-1];
-    if(d>0)gain+=d;
-    else loss-=d;
+  let g = 0, l = 0;
+
+  for (let i = 1; i <= n; i++) {
+    const d = a[i] - a[i - 1];
+    if (d > 0) g += d;
+    else l -= d;
   }
 
-  let ag=gain/n,al=loss/n;
-  out[n]=al===0?100:100-100/(1+ag/al);
+  let ag = g / n, al = l / n;
+  out[n] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
 
-  for(let i=n+1;i<a.length;i++){
-    const d=a[i]-a[i-1];
-    ag=(ag*(n-1)+Math.max(d,0))/n;
-    al=(al*(n-1)+Math.max(-d,0))/n;
-    out[i]=al===0?100:100-100/(1+ag/al);
+  for (let i = n + 1; i < a.length; i++) {
+    const d = a[i] - a[i - 1];
+    ag = (ag * (n - 1) + Math.max(d, 0)) / n;
+    al = (al * (n - 1) + Math.max(-d, 0)) / n;
+    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
   }
+
   return out;
 }
 
-function pivots(a,kind,left=2,right=2){
-  const out=[];
-  for(let i=left;i<a.length-right;i++){
-    if(a[i]===null||!Number.isFinite(a[i]))continue;
-    const w=a.slice(i-left,i+right+1);
-    if(w.some(v=>v===null||!Number.isFinite(v)))continue;
+function rsiStates(vals) {
+  const status = Array(vals.length).fill("一般");
+  const days = Array(vals.length).fill(0);
 
-    if(kind==="high"&&a[i]===Math.max(...w)&&w.filter(v=>v===a[i]).length===1)out.push(i);
-    if(kind==="low"&&a[i]===Math.min(...w)&&w.filter(v=>v===a[i]).length===1)out.push(i);
-  }
-  return out;
-}
+  let mode = "一般";
+  let count = 0;
 
-/*
- * 配對規則：日期距離不超過 2 根 K 線；
- * 以距離由近到遠進行一對一貪婪配對。
- * 這是既有規則，不保證得到全域最佳配對。
- */
-function pairPivots(pricePivots,difPivots){
-  const candidates=[];
-  for(const p of pricePivots){
-    for(const d of difPivots){
-      const distance=Math.abs(p-d);
-      if(distance<=2)candidates.push({p,d,distance});
-    }
-  }
-  candidates.sort((a,b)=>a.distance-b.distance||a.p-b.p||a.d-b.d);
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
 
-  const usedPrice=new Set(),usedDif=new Set(),pairs=[];
-  for(const x of candidates){
-    if(usedPrice.has(x.p)||usedDif.has(x.d))continue;
-    usedPrice.add(x.p);
-    usedDif.add(x.d);
-    pairs.push([x.p,x.d]);
-  }
-  pairs.sort((a,b)=>a[0]-b[0]);
-  return pairs;
-}
-
-async function getJSON(url){
-  const res=await fetch(url);
-  if(!res.ok)throw Error("HTTP "+res.status);
-  return res.json();
-}
-
-function baseAudit(symbol){
-  return {
-    symbol,status:"處理中",rawCandles:0,closedCandles:0,
-    priceHigh:0,priceLow:0,difHigh:0,difLow:0,
-    highPairs:0,lowPairs:0,candidateGroups:0,signalCount:0,
-    reasons:[]
-  };
-}
-
-function findSignals(kind,pairs,prices,dif,dea,dates,audit,symbol,rsiValues){
-  const found=[];
-  const priceName=kind==="high"?"頂背離":"底背離";
-
-  audit.candidateGroups += Math.max(0,pairs.length-1);
-
-  if(pairs.length<2){
-    audit.reasons.push(priceName+"：配對少於兩個，無法比較");
-    return found;
-  }
-
-  let hadGap=false,hadDivergence=false,hadZeroInvalidation=false;
-
-  for(let j=pairs.length-1;j>0;j--){
-    const [p1,d1]=pairs[j-1];
-    const [p2,d2]=pairs[j];
-    const gap=p2-p1;
-
-    if(gap<5||gap>60)continue;
-    hadGap=true;
-
-    let valid=false,invalid=false;
-    if(kind==="high"){
-      valid=prices[p2]>prices[p1]&&dif[d2]<dif[d1]&&dif[d1]>0&&dif[d2]>0;
-      invalid=dif.slice(p2+1).some(v=>v!==null&&v<=0)&&
-              dea.slice(p2+1).some(v=>v!==null&&v<=0);
-    }else{
-      valid=prices[p2]<prices[p1]&&dif[d2]>dif[d1]&&dif[d1]<0&&dif[d2]<0;
-      invalid=dif.slice(p2+1).some(v=>v!==null&&v>=0)&&
-              dea.slice(p2+1).some(v=>v!==null&&v>=0);
-    }
-
-    if(!valid)continue;
-    hadDivergence=true;
-    if(invalid){
-      hadZeroInvalidation=true;
+    if (v === null) {
+      status[i] = "資料不足";
+      days[i] = 0;
       continue;
     }
 
+    const next = v >= 80 ? "超買" : v <= 20 ? "超賣" : "一般";
+
+    if (next !== mode) {
+      mode = next;
+      count = next === "一般" ? 0 : 1;
+    } else if (next !== "一般") {
+      count++;
+    } else {
+      count = 0;
+    }
+
+    status[i] = mode;
+    days[i] = count;
+  }
+
+  return { status, days };
+}
+
+function pivots(a, kind, left = 2, right = 2) {
+  const out = [];
+
+  for (let i = left; i < a.length - right; i++) {
+    if (a[i] === null || !Number.isFinite(a[i])) continue;
+
+    const w = a.slice(i - left, i + right + 1);
+    if (w.some(v => v === null || !Number.isFinite(v))) continue;
+
+    if (
+      kind === "high" &&
+      a[i] === Math.max(...w) &&
+      w.filter(v => v === a[i]).length === 1
+    ) out.push(i);
+
+    if (
+      kind === "low" &&
+      a[i] === Math.min(...w) &&
+      w.filter(v => v === a[i]).length === 1
+    ) out.push(i);
+  }
+
+  return out;
+}
+
+function pairPivots(pricePivots, difPivots) {
+  const c = [];
+
+  for (const p of pricePivots) {
+    for (const d of difPivots) {
+      const distance = Math.abs(p - d);
+      if (distance <= 2) c.push({ p, d, distance });
+    }
+  }
+
+  c.sort((a, b) =>
+    a.distance - b.distance || a.p - b.p || a.d - b.d
+  );
+
+  const up = new Set();
+  const ud = new Set();
+  const pairs = [];
+
+  for (const x of c) {
+    if (up.has(x.p) || ud.has(x.d)) continue;
+    up.add(x.p);
+    ud.add(x.d);
+    pairs.push([x.p, x.d]);
+  }
+
+  return pairs.sort((a, b) => a[0] - b[0]);
+}
+
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw Error("HTTP " + res.status);
+  return res.json();
+}
+
+function baseAudit(symbol) {
+  return {
+    symbol,
+    status: "處理中",
+    rawCandles: 0,
+    closedCandles: 0,
+    priceHigh: 0,
+    priceLow: 0,
+    difHigh: 0,
+    difLow: 0,
+    highPairs: 0,
+    lowPairs: 0,
+    candidateGroups: 0,
+    signalCount: 0,
+    reasons: []
+  };
+}
+
+function findSignals(
+  kind, pairs, prices, dif, dea, dates, audit, symbol,
+  rsiValues, rsiStatus, rsiDays
+) {
+  const found = [];
+  const name = kind === "high" ? "頂背離" : "底背離";
+
+  audit.candidateGroups += Math.max(0, pairs.length - 1);
+
+  if (pairs.length < 2) {
+    audit.reasons.push(name + "：配對少於兩個，無法比較");
+    return found;
+  }
+
+  let runCount = 0;
+  let previousSecond = -1;
+  let hadGap = false;
+  let hadDivergence = false;
+
+  const directionIsPositive = kind === "high";
+
+  // 按時間順序判斷每一組相鄰波段。
+  // DEA 慢線碰到或穿過 0 軸，就結束該方向目前這一輪。
+  for (let j = 1; j < pairs.length; j++) {
+    const [p1, d1] = pairs[j - 1];
+    const [p2, d2] = pairs[j];
+    const gap = p2 - p1;
+
+    if (gap < 5 || gap > 60) continue;
+    hadGap = true;
+
+    // 檢查前一組波段之後到目前波段期間，
+    // DEA 是否已碰到該方向的解除零軸。
+    const from = previousSecond >= 0 ? previousSecond + 1 : p1 + 1;
+    const to = p2;
+
+    let reset = false;
+
+    for (let i = Math.max(0, from); i <= to; i++) {
+      if (dea[i] === null) continue;
+
+      if (directionIsPositive ? dea[i] <= 0 : dea[i] >= 0) {
+        reset = true;
+        break;
+      }
+    }
+
+    if (reset) runCount = 0;
+
+    const valid = kind === "high"
+      ? prices[p2] > prices[p1] &&
+        dif[d2] < dif[d1] &&
+        dif[d1] > 0 &&
+        dif[d2] > 0
+      : prices[p2] < prices[p1] &&
+        dif[d2] > dif[d1] &&
+        dif[d1] < 0 &&
+        dif[d2] < 0;
+
+    previousSecond = p2;
+
+    if (!valid) continue;
+
+    hadDivergence = true;
+    runCount++;
+
     found.push({
-      symbol,signal:kind==="high"?"MACD頂背離":"MACD底背離",
-      date1:dates[p1],date2:dates[p2],
-      price1:prices[p1],price2:prices[p2],
-      dif1:dif[d1],dif2:dif[d2],rsi:rsiValues[p2]
+      symbol,
+      signal: kind === "high" ? "MACD頂背離" : "MACD底背離",
+      count: runCount,
+      date1: dates[p1],
+      date2: dates[p2],
+      price1: prices[p1],
+      price2: prices[p2],
+      dif1: dif[d1],
+      dif2: dif[d2],
+      rsi: rsiValues[p2],
+      rsiStatus: rsiStatus[p2],
+      rsiDays: rsiDays[p2]
     });
-
-    // 維持原始規則：每個方向最多保留一組訊號。
-    break;
   }
 
-  if(found.length===0){
-    if(!hadGap)audit.reasons.push(priceName+"：沒有 5–60 根 K 線間隔的配對");
-    else if(!hadDivergence)audit.reasons.push(priceName+"：配對不符合背離條件");
-    else if(hadZeroInvalidation)audit.reasons.push(priceName+"：符合背離但被零軸條件排除");
-    else audit.reasons.push(priceName+"：沒有有效訊號");
+  if (found.length === 0) {
+    if (!hadGap) {
+      audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
+    } else if (!hadDivergence) {
+      audit.reasons.push(name + "：配對不符合背離條件");
+    } else {
+      audit.reasons.push(name + "：沒有有效訊號");
+    }
   }
+
   return found;
 }
 
-async function scanSymbol(symbol){
-  const audit=baseAudit(symbol);
+async function scanSymbol(symbol) {
+  const audit = baseAudit(symbol);
 
-  try{
-    const raw=await getJSON(
+  try {
+    const raw = await getJSON(
       `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=240`
     );
-    audit.rawCandles=Array.isArray(raw)?raw.length:0;
 
-    if(!Array.isArray(raw))throw Error("K 線回傳格式不是陣列");
+    audit.rawCandles = Array.isArray(raw) ? raw.length : 0;
 
-    const now=Date.now();
-    const candles=raw.filter(x=>Array.isArray(x)&&Number(x[6])<now);
-    audit.closedCandles=candles.length;
-
-    if(candles.length<80){
-      audit.status="資料不足";
-      audit.reasons.push("已收盤 K 線少於 80 根");
-      return {signals:[],audit};
+    if (!Array.isArray(raw)) {
+      throw Error("K 線回傳格式不是陣列");
     }
 
-    const close=candles.map(x=>Number(x[4]));
-    const high=candles.map(x=>Number(x[2]));
-    const low=candles.map(x=>Number(x[3]));
-    const dates=candles.map(x=>new Date(Number(x[0])).toISOString().slice(0,10));
+    const now = Date.now();
+    const candles = raw.filter(
+      x => Array.isArray(x) && Number(x[6]) < now
+    );
 
-    if([...close,...high,...low].some(v=>!Number.isFinite(v))){
+    audit.closedCandles = candles.length;
+
+    if (candles.length < 80) {
+      audit.status = "資料不足";
+      audit.reasons.push("已收盤 K 線少於 80 根");
+      return { signals: [], audit };
+    }
+
+    const close = candles.map(x => Number(x[4]));
+    const high = candles.map(x => Number(x[2]));
+    const low = candles.map(x => Number(x[3]));
+    const dates = candles.map(
+      x => new Date(Number(x[0])).toISOString().slice(0, 10)
+    );
+
+    if ([...close, ...high, ...low].some(v => !Number.isFinite(v))) {
       throw Error("K 線包含無效價格");
     }
 
-    const fast=ema(close,12);
-    const slowEma=ema(close,26);
-    const dif=close.map((_,i)=>
-      fast[i]===null||slowEma[i]===null?null:fast[i]-slowEma[i]
+    const fast = ema(close, 12);
+    const slow = ema(close, 26);
+
+    const dif = close.map((_, i) =>
+      fast[i] === null || slow[i] === null
+        ? null
+        : fast[i] - slow[i]
     );
 
-    const firstDif=dif.findIndex(v=>v!==null);
-    if(firstDif<0)throw Error("無法計算 DIF");
+    const first = dif.findIndex(v => v !== null);
+    if (first < 0) throw Error("無法計算 DIF");
 
-    const dea=Array(firstDif).fill(null).concat(ema(dif.slice(firstDif),9));
-    const rsiValues=rsi(close,14);
-    const signals=[];
+    const dea = Array(first).fill(null).concat(
+      ema(dif.slice(first), 9)
+    );
 
-    for(const kind of ["high","low"]){
-      const prices=kind==="high"?high:low;
-      const pricePivots=pivots(prices,kind,2,2);
-      const difPivots=pivots(dif,kind,2,2);
+    const rv = rsi(close, 14);
+    const rs = rsiStates(rv);
+    const signals = [];
 
-      if(kind==="high"){
-        audit.priceHigh=pricePivots.length;
-        audit.difHigh=difPivots.length;
-      }else{
-        audit.priceLow=pricePivots.length;
-        audit.difLow=difPivots.length;
+    for (const kind of ["high", "low"]) {
+      const prices = kind === "high" ? high : low;
+      const pp = pivots(prices, kind, 2, 2);
+      const dp = pivots(dif, kind, 2, 2);
+
+      if (kind === "high") {
+        audit.priceHigh = pp.length;
+        audit.difHigh = dp.length;
+      } else {
+        audit.priceLow = pp.length;
+        audit.difLow = dp.length;
       }
 
-      const pairs=pairPivots(pricePivots,difPivots);
-      if(kind==="high")audit.highPairs=pairs.length;
-      else audit.lowPairs=pairs.length;
+      const pairs = pairPivots(pp, dp);
+
+      if (kind === "high") audit.highPairs = pairs.length;
+      else audit.lowPairs = pairs.length;
 
       signals.push(...findSignals(
-        kind,pairs,prices,dif,dea,dates,audit,symbol,rsiValues
+        kind, pairs, prices, dif, dea, dates, audit, symbol,
+        rv, rs.status, rs.days
       ));
     }
 
-    audit.signalCount=signals.length;
-    audit.status="成功完成";
-    if(signals.length===0&&audit.reasons.length===0){
+    audit.signalCount = signals.length;
+    audit.status = "成功完成";
+
+    if (!signals.length && !audit.reasons.length) {
       audit.reasons.push("沒有符合條件的訊號");
     }
-    return {signals,audit};
 
-  }catch(e){
-    audit.status="請求失敗";
-    audit.reasons.push(String(e.message||e));
-    return {signals:[],audit};
+    return { signals, audit };
+
+  } catch (e) {
+    audit.status = "請求失敗";
+    audit.reasons.push(String(e.message || e));
+    return { signals: [], audit };
   }
 }
 
-function escapeCSV(v){
-  const s=String(v??"");
-  return '"'+s.replace(/"/g,'""')+'"';
+function esc(v) {
+  return '"' + String(v ?? "").replace(/"/g, '""') + '"';
 }
 
-function downloadCSV(filename,headers,rows){
-  const content="\uFEFF"+[headers,...rows]
-    .map(row=>row.map(escapeCSV).join(",")).join("\r\n");
-  const blob=new Blob([content],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a");
-  a.href=url;
-  a.download=filename;
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
+function downloadCSV(name, headers, rows) {
+  const content = "\uFEFF" + [headers, ...rows]
+    .map(r => r.map(esc).join(","))
+    .join("\r\n");
 
-function renderSignals(){
-  const body=$("results");
-  body.replaceChildren();
-
-  allSignals.sort((a,b)=>b.date2.localeCompare(a.date2));
-  for(const x of allSignals){
-    const tr=document.createElement("tr");
-    const values=[
-      x.symbol,x.signal,`${x.date1} → ${x.date2}`,
-      `${x.price1} → ${x.price2}`,
-      `${x.dif1.toFixed(8)} → ${x.dif2.toFixed(8)}`,
-      x.rsi===null?"—":x.rsi.toFixed(1)+
-        (x.rsi>=80?"（超買）":x.rsi<=20?"（超賣）":"")
-    ];
-    values.forEach((v,i)=>{
-      const td=document.createElement("td");
-      td.textContent=v;
-      if(i===1)td.className=x.signal.includes("頂")?"down":"up";
-      tr.appendChild(td);
-    });
-    body.appendChild(tr);
-  }
-}
-
-function renderAudit(){
-  const body=$("auditResults");
-  body.replaceChildren();
-  const filter=$("auditFilter").value;
-  const search=$("auditSearch").value.trim().toUpperCase();
-
-  const rows=allAudit.filter(a=>{
-    if(search&&!a.symbol.includes(search))return false;
-    if(filter==="ok"&&a.status!=="成功完成")return false;
-    if(filter==="error"&&a.status!=="請求失敗")return false;
-    if(filter==="insufficient"&&a.status!=="資料不足")return false;
-    if(filter==="signal"&&a.signalCount===0)return false;
-    if(filter==="none"&&(a.signalCount>0||a.status!=="成功完成"))return false;
-    return true;
+  const blob = new Blob([content], {
+    type: "text/csv;charset=utf-8;"
   });
 
-  for(const a of rows){
-    const tr=document.createElement("tr");
-    const values=[
-      a.symbol,a.status,a.rawCandles,a.closedCandles,
-      a.priceHigh,a.priceLow,a.difHigh,a.difLow,
-      a.highPairs,a.lowPairs,a.candidateGroups,a.signalCount,
-      a.reasons.join("；")||"—"
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderSignals() {
+  const body = $("results");
+  body.replaceChildren();
+
+  allSignals.sort((a, b) =>
+    b.date2.localeCompare(a.date2) ||
+    a.symbol.localeCompare(b.symbol)
+  );
+
+  for (const x of allSignals) {
+    const tr = document.createElement("tr");
+
+    const vals = [
+      x.symbol,
+      x.signal,
+      "第 " + x.count + " 次",
+      `${x.date1} → ${x.date2}`,
+      `${x.price1} → ${x.price2}`,
+      `${x.dif1.toFixed(8)} → ${x.dif2.toFixed(8)}`,
+      x.rsi == null ? "—" : x.rsi.toFixed(1),
+      x.rsiStatus,
+      x.rsiDays ? `第 ${x.rsiDays} 天` : "—"
     ];
-    values.forEach((v,i)=>{
-      const td=document.createElement("td");
-      td.textContent=v;
-      if(i===1)td.className=a.status==="成功完成"?"up":"warn";
+
+    vals.forEach((v, i) => {
+      const td = document.createElement("td");
+      td.textContent = v;
+
+      if (i === 1) {
+        td.className = x.signal.includes("頂") ? "down" : "up";
+      }
+
+      if (i === 7) {
+        td.className = x.rsiStatus === "超買"
+          ? "down"
+          : x.rsiStatus === "超賣" ? "up" : "";
+      }
+
       tr.appendChild(td);
     });
+
     body.appendChild(tr);
   }
 }
 
-$("auditFilter").addEventListener("change",renderAudit);
-$("auditSearch").addEventListener("input",renderAudit);
+function renderAudit() {
+  const body = $("auditResults");
+  body.replaceChildren();
 
-$("exportSignals").onclick=()=>{
-  downloadCSV("macd_signals.csv",
-    ["symbol","signal","date1","date2","price1","price2","dif1","dif2","rsi"],
-    allSignals.map(x=>[
-      x.symbol,x.signal,x.date1,x.date2,x.price1,x.price2,x.dif1,x.dif2,x.rsi
-    ])
+  const f = $("auditFilter").value;
+  const s = $("auditSearch").value.trim().toUpperCase();
+
+  const rows = allAudit.filter(a =>
+    (!s || a.symbol.includes(s)) &&
+    (
+      f === "all" ||
+      (f === "ok" && a.status === "成功完成") ||
+      (f === "error" && a.status === "請求失敗") ||
+      (f === "insufficient" && a.status === "資料不足") ||
+      (f === "signal" && a.signalCount > 0) ||
+      (f === "none" && a.signalCount === 0 && a.status === "成功完成")
+    )
   );
-};
 
-$("exportAudit").onclick=()=>{
-  downloadCSV("macd_audit.csv",
-    ["symbol","status","rawCandles","closedCandles","priceHigh","priceLow",
-     "difHigh","difLow","highPairs","lowPairs","candidateGroups",
-     "signalCount","reasons"],
-    allAudit.map(a=>[
-      a.symbol,a.status,a.rawCandles,a.closedCandles,a.priceHigh,a.priceLow,
-      a.difHigh,a.difLow,a.highPairs,a.lowPairs,a.candidateGroups,
-      a.signalCount,a.reasons.join("；")
-    ])
-  );
-};
+  for (const a of rows) {
+    const tr = document.createElement("tr");
 
-$("scan").onclick=async()=>{
-  if(isRunning)return;
-  isRunning=true;
-  $("scan").disabled=true;
-  $("exportSignals").disabled=true;
-  $("exportAudit").disabled=true;
+    const vals = [
+      a.symbol, a.status, a.rawCandles, a.closedCandles,
+      a.priceHigh, a.priceLow, a.difHigh, a.difLow,
+      a.highPairs, a.lowPairs, a.candidateGroups,
+      a.signalCount, a.reasons.join("；") || "—"
+    ];
+
+    vals.forEach((v, i) => {
+      const td = document.createElement("td");
+      td.textContent = v;
+
+      if (i === 1) {
+        td.className = a.status === "成功完成" ? "up" : "warn";
+      }
+
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  }
+}
+
+$("auditFilter").addEventListener("change", renderAudit);
+$("auditSearch").addEventListener("input", renderAudit);
+
+$("exportSignals").onclick = () => downloadCSV(
+  "macd_divergence_history.csv",
+  [
+    "symbol", "signal", "consecutive_count", "date1", "date2",
+    "price1", "price2", "dif1", "dif2", "rsi",
+    "rsi_status", "rsi_days"
+  ],
+  allSignals.map(x => [
+    x.symbol, x.signal, x.count, x.date1, x.date2,
+    x.price1, x.price2, x.dif1, x.dif2, x.rsi,
+    x.rsiStatus, x.rsiDays
+  ])
+);
+
+$("exportAudit").onclick = () => downloadCSV(
+  "macd_audit.csv",
+  [
+    "symbol", "status", "rawCandles", "closedCandles",
+    "priceHigh", "priceLow", "difHigh", "difLow",
+    "highPairs", "lowPairs", "candidateGroups",
+    "signalCount", "reasons"
+  ],
+  allAudit.map(a => [
+    a.symbol, a.status, a.rawCandles, a.closedCandles,
+    a.priceHigh, a.priceLow, a.difHigh, a.difLow,
+    a.highPairs, a.lowPairs, a.candidateGroups,
+    a.signalCount, a.reasons.join("；")
+  ])
+);
+
+$("scan").onclick = async () => {
+  if (isRunning) return;
+
+  isRunning = true;
+  $("scan").disabled = true;
+  $("exportSignals").disabled = true;
+  $("exportAudit").disabled = true;
   $("results").replaceChildren();
   $("auditResults").replaceChildren();
-  allSignals=[];
-  allAudit=[];
 
-  try{
-    $("status").textContent="正在取得最新合約清單……";
-    const info=await getJSON(API+"/fapi/v1/exchangeInfo");
+  allSignals = [];
+  allAudit = [];
 
-    if(!info||!Array.isArray(info.symbols)){
+  try {
+    $("status").textContent = "正在取得最新合約清單……";
+
+    const info = await getJSON(API + "/fapi/v1/exchangeInfo");
+
+    if (!info || !Array.isArray(info.symbols)) {
       throw Error("交易所合約清單格式不正確，停止掃描");
     }
 
-    const symbols=info.symbols
-      .filter(s=>
-        s.status==="TRADING"&&
-        s.contractType==="PERPETUAL"&&
-        s.quoteAsset==="USDT"
+    const symbols = info.symbols
+      .filter(s =>
+        s.status === "TRADING" &&
+        s.contractType === "PERPETUAL" &&
+        s.quoteAsset === "USDT"
       )
-      .map(s=>s.symbol);
+      .map(s => s.symbol);
 
-    const expected=symbols.length;
-    if(expected===0)throw Error("取得的合約清單為空，停止掃描");
+    const total = symbols.length;
 
-    $("status").textContent=
-      `本次合約清單取得成功：${expected} 個\n`+
-      "正在逐一取得 K 線並記錄稽核資料……";
+    if (!total) throw Error("取得的合約清單為空，停止掃描");
 
-    for(let i=0;i<symbols.length;i++){
-      $("status").textContent=
-        `掃描進度：${i+1}/${expected}\n`+
-        `已完成紀錄：${allAudit.length}\n`+
-        `訊號數：${allSignals.length}\n`+
-        `請求失敗：${allAudit.filter(a=>a.status==="請求失敗").length}\n`+
-        `資料不足：${allAudit.filter(a=>a.status==="資料不足").length}`;
+    for (let i = 0; i < total; i++) {
+      const result = await scanSymbol(symbols[i]);
 
-      const result=await scanSymbol(symbols[i]);
       allAudit.push(result.audit);
       allSignals.push(...result.signals);
 
-      // 讓稽核表逐步更新，方便觀察進度。
-      if((i+1)%10===0||i===symbols.length-1){
+      $("status").textContent =
+        `掃描進度：${i + 1}/${total}\n` +
+        `已完成紀錄：${allAudit.length}\n` +
+        `背離紀錄：${allSignals.length}\n` +
+        `請求失敗：${allAudit.filter(a => a.status === "請求失敗").length}\n` +
+        `資料不足：${allAudit.filter(a => a.status === "資料不足").length}`;
+
+      if ((i + 1) % 10 === 0 || i === total - 1) {
         renderAudit();
       }
 
-      if(i%5===4)await sleep(250);
+      if (i % 5 === 4) await sleep(250);
     }
 
     renderSignals();
     renderAudit();
 
-    const success=allAudit.filter(a=>a.status==="成功完成").length;
-    const failed=allAudit.filter(a=>a.status==="請求失敗").length;
-    const insufficient=allAudit.filter(a=>a.status==="資料不足").length;
-    const complete=allAudit.length===expected;
+    const ok = allAudit.filter(a => a.status === "成功完成").length;
+    const err = allAudit.filter(a => a.status === "請求失敗").length;
+    const short = allAudit.filter(a => a.status === "資料不足").length;
 
-    $("status").textContent=
-      `掃描結束\n`+
-      `本次清單合約數：${expected}\n`+
-      `已產生稽核紀錄：${allAudit.length}\n`+
-      `成功完成：${success}\n`+
-      `請求或資料錯誤：${failed}\n`+
-      `資料不足：${insufficient}\n`+
-      `訊號筆數：${allSignals.length}\n`+
-      `清單紀錄數核對：${complete?"一致":"不一致，請檢查"}\n`+
-      `注意：紀錄數一致不等於背離演算法已被證明正確。`;
+    $("status").textContent =
+      `掃描結束\n` +
+      `合約清單：${total}\n` +
+      `稽核紀錄：${allAudit.length}\n` +
+      `成功完成：${ok}\n` +
+      `請求失敗：${err}\n` +
+      `資料不足：${short}\n` +
+      `背離紀錄：${allSignals.length}\n` +
+      `紀錄數核對：${allAudit.length === total ? "一致" : "不一致"}\n` +
+      `提醒：紀錄完整不代表演算法已經過獨立驗證。`;
 
-    $("exportSignals").disabled=false;
-    $("exportAudit").disabled=false;
+    $("exportSignals").disabled = false;
+    $("exportAudit").disabled = false;
 
-  }catch(e){
-    $("status").textContent=
-      "掃描中止："+String(e.message||e)+
-      "\n請檢查瀏覽器網路連線與 Binance API 狀態。";
-  }finally{
-    isRunning=false;
-    $("scan").disabled=false;
+  } catch (e) {
+    $("status").textContent =
+      "掃描中止：" + String(e.message || e) +
+      "\n請檢查網路連線與 Binance API 狀態。";
+
+  } finally {
+    isRunning = false;
+    $("scan").disabled = false;
   }
 };
 </script>
