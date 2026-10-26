@@ -1,0 +1,47 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幣安 MACD 背離掃描器</title>
+<style>
+body{font-family:Arial,sans-serif;background:#111827;color:#f9fafb;margin:0;padding:24px}
+main{max-width:900px;margin:auto}
+section{background:#1f2937;border-radius:12px;padding:20px;margin:16px 0}
+button{background:#f0b90b;border:0;border-radius:8px;padding:12px 20px;font-size:16px;cursor:pointer}
+.muted{color:#9ca3af}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px;border-bottom:1px solid #374151}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+<h1>幣安日線 MACD 背離掃描器</h1>
+<p class="muted">USDT 本位永續合約｜日線｜MACD 12、26、9</p>
+<section>
+<h2>掃描控制</h2>
+<p>掃描範圍：所有可交易的 USDT 本位永續合約</p>
+<p>背離判斷：價格高低點與 MACD DIF 轉折比較</p>
+<button id="scan">開始掃描</button>
+<p id="status">尚未開始掃描</p>
+</section>
+<section>
+<h2>掃描結果</h2>
+<p id="summary">尚無結果</p>
+<div class="scroll">
+<table>
+<thead><tr><th>幣種</th><th>訊號</th><th>日期</th><th>價格</th><th>DIF</th></tr></thead>
+<tbody id="results"><tr><td colspan="5">等待掃描</td></tr></tbody>
+</table>
+</div>
+</section>
+</main>
+<script>
+document.getElementById("scan").addEventListener("click",function(){
+document.getElementById("status").textContent="介面已建立，下一步接入幣安公開行情與背離掃描功能。";
+});
+</script>
+</body>
+</html>
