@@ -315,6 +315,9 @@ summary {
     </div>
     <div id="anomalyStatus">尚未開始異常波動掃描。</div>
     <div class="note">
+      新增的回測欄為獨立測試：只對目前評分 80 分以上名單計算；歷史事件使用相同的振幅／成交額／成交筆數初篩，歷史 OI 等資料無法完整重建，因此歷史事件不代表也曾達 80 分。成功／失敗以訊號後下一根 15 分鐘 K 棒開盤為基準，測試 24 小時內先觸及同方向 ±10% 目標；同一根 K 棒同時觸及上下目標列為「順序不明」。
+    </div>
+    <div class="note">
       嚴格模式初始門檻：振幅至少為前 40 根中位數的 2.5 倍、成交額至少為前 20 根中位數的 3 倍、成交筆數至少為前 20 根中位數的 2 倍；24 小時成交額至少 1,000 萬 USDT、買賣價差不超過 0.15%。這些是待回測的起始參數。
     </div>
   </div>
@@ -339,6 +342,9 @@ summary {
             <th>歷史資金費率</th>
             <th>主動買賣比</th>
             <th>觀察說明</th>
+            <!-- BACKTEST UI START：可獨立移除此欄 -->
+            <th>同幣歷史回測（成功／失敗）</th>
+            <!-- BACKTEST UI END -->
           </tr>
         </thead>
         <tbody id="anomalyResults"></tbody>
@@ -1469,6 +1475,76 @@ function anomalySignalClass(signal) {
   return "signal-watch";
 }
 
+/* =========================
+   BACKTEST ENGINE START
+   獨立回測：不改動正式掃描的評分、分類、硬性條件或篩選。
+   以歷史異常 K 棒方向（收盤 > 開盤為上、收盤 < 開盤為下）測試 24 小時內 ±10% 目標。
+   歷史事件以同一組振幅／成交額／成交筆數初篩；歷史 OI、資金費率等資料不完整，
+   因此回測數字不代表歷史事件也曾通過目前的 80 分評分門檻。
+========================= */
+async function backtestSymbolHistory(symbol, rangeThreshold, volumeThreshold) {
+  const result = { success: 0, fail: 0, ambiguous: 0, tested: 0, note: "" };
+  try {
+    // 1500 根 15m K 棒約涵蓋 15.6 天；每個事件必須有完整 24 小時後續資料。
+    const raw = await getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=1500`);
+    if (!Array.isArray(raw)) throw new Error("K 線格式不正確");
+    const now = Date.now();
+    const candles = raw.filter(c => Number(c[6]) < now).map(c => ({
+      time:Number(c[0]), open:Number(c[1]), high:Number(c[2]), low:Number(c[3]),
+      close:Number(c[4]), quoteVolume:Number(c[7]), trades:Number(c[8])
+    }));
+    if (candles.length < 140) {
+      result.note = "歷史資料不足";
+      return result;
+    }
+    // 24 小時 = 96 根 15 分鐘 K 棒；i+1 是訊號確認後的下一根 K 棒，使用其開盤作基準價。
+    for (let i = 40; i + 96 < candles.length; i++) {
+      const c = candles[i];
+      if (![c.open,c.high,c.low,c.close,c.quoteVolume,c.trades].every(Number.isFinite) || c.open <= 0) continue;
+      const change = c.close - c.open;
+      if (change === 0) continue;
+      const rangePct = (c.high-c.low)/c.open*100;
+      const baselineRange = median(candles.slice(i-40,i).map(k => k.open > 0 ? (k.high-k.low)/k.open*100 : null).filter(Number.isFinite));
+      const volBase = median(candles.slice(i-20,i).map(k=>k.quoteVolume).filter(v=>Number.isFinite(v)&&v>0));
+      const tradeBase = median(candles.slice(i-20,i).map(k=>k.trades).filter(v=>Number.isFinite(v)&&v>0));
+      if (!(baselineRange>0) || !(volBase>0) || !(tradeBase>0)) continue;
+      if (rangePct/baselineRange < rangeThreshold || c.quoteVolume/volBase < volumeThreshold || c.trades/tradeBase < 2) continue;
+
+      const entry = candles[i+1].open;
+      if (!(Number.isFinite(entry) && entry > 0)) continue;
+      const upTarget = entry*1.10;
+      const downTarget = entry*0.90;
+      const isUp = change > 0;
+      let outcome = "unresolved";
+      for (let j=i+1; j<=i+96; j++) {
+        const f = candles[j];
+        const hitUp = f.high >= upTarget;
+        const hitDown = f.low <= downTarget;
+        if (hitUp && hitDown) { outcome = "ambiguous"; break; }
+        if (isUp && hitUp) { outcome = "success"; break; }
+        if (isUp && hitDown) { outcome = "fail"; break; }
+        if (!isUp && hitDown) { outcome = "success"; break; }
+        if (!isUp && hitUp) { outcome = "fail"; break; }
+      }
+      if (outcome === "success") result.success++;
+      else if (outcome === "ambiguous") result.ambiguous++;
+      else result.fail++; // 24 小時內未達目標，也記為未成功
+      result.tested++;
+    }
+    result.note = result.tested ? "依歷史初篩事件統計" : "期間內沒有可測試事件";
+  } catch (error) {
+    result.note = "回測資料取得失敗：" + String(error.message || error);
+  }
+  return result;
+}
+
+async function runAnomalyBacktests(items, rangeThreshold, volumeThreshold) {
+  await mapWithConcurrency(items, 3, async item => {
+    item.backtest = await backtestSymbolHistory(item.symbol, rangeThreshold, volumeThreshold);
+  });
+}
+/* BACKTEST ENGINE END */
+
 function renderAnomalyRows() {
   const body = $("anomalyResults");
   body.replaceChildren();
@@ -1480,8 +1556,7 @@ function renderAnomalyRows() {
     if (signal.includes("下跌延續")) return 4;
     return 3;
   };
-  // 只顯示評分 80 分以上（含 80）；79 分以下不列入畫面。
-  const rows = anomalyState.rows.filter(item => Number.isFinite(item.score) && item.score >= 80).sort((a,b) =>
+  const rows = [...anomalyState.rows].sort((a,b) =>
     priority(a.signal)-priority(b.signal) ||
     (b.volumeRatio-a.volumeRatio) ||
     (b.rangeRatio-a.rangeRatio)
@@ -1511,6 +1586,22 @@ function renderAnomalyRows() {
       if (cell.cls) td.className = cell.cls;
       tr.appendChild(td);
     }
+
+    // BACKTEST UI START：只在目前 80 分以上名單旁顯示歷史統計
+    const btCell = document.createElement("td");
+    const bt = item.backtest;
+    if (bt) {
+      btCell.textContent = `成功 ${bt.success} 次／失敗 ${bt.fail} 次／順序不明 ${bt.ambiguous} 次（測試 ${bt.tested} 次）`;
+      const note = document.createElement("div");
+      note.className = "small-note";
+      note.textContent = bt.note || "";
+      btCell.appendChild(note);
+    } else {
+      btCell.textContent = "回測準備中／尚無資料";
+    }
+    tr.appendChild(btCell);
+    // BACKTEST UI END
+
     body.appendChild(tr);
   }
 }
@@ -1518,11 +1609,12 @@ function renderAnomalyRows() {
 $("exportAnomaly").addEventListener("click", () => {
   downloadCSV(
     "binance_anomaly_watchlist.csv",
-    ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
-    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).map(x => [
+    ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes","backtest_success","backtest_fail","backtest_ambiguous","backtest_tested","backtest_note"],
+    anomalyState.rows.map(x => [
       x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
       x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
-      formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
+      formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";"),
+      x.backtest?.success ?? "", x.backtest?.fail ?? "", x.backtest?.ambiguous ?? "", x.backtest?.tested ?? "", x.backtest?.note ?? ""
     ])
   );
 });
@@ -1609,6 +1701,14 @@ $("scanAnomaly").addEventListener("click", async () => {
       }
     });
 
+    // BACKTEST DATA START：只回測目前 shortlist（正式畫面仍只顯示 80 分以上）
+    const eligibleForBacktest = anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80);
+    if (eligibleForBacktest.length) {
+      $("anomalyStatus").textContent = `正式掃描完成，正在為 ${eligibleForBacktest.length} 個 80 分以上幣種計算同幣歷史回測……`;
+      await runAnomalyBacktests(eligibleForBacktest, rangeThreshold, volumeThreshold);
+    }
+    // BACKTEST DATA END
+
     renderAnomalyRows();
     $("exportAnomaly").disabled = anomalyState.rows.length === 0;
     $("anomalyStatus").textContent =
@@ -1620,7 +1720,7 @@ $("scanAnomaly").addEventListener("click", async () => {
       `A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n` +
       `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
       `K 線請求失敗：${errors.length}\n` +
-      `顯示評分 80 分以上：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).length} 筆（79 分以下不顯示；按振幅倍數 × 成交額倍數排序）\n` +
+      `顯示前 ${shortlist.length} 名（按振幅倍數 × 成交額倍數排序）\n` +
       `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
 
   } catch (error) {
