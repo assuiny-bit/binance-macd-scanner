@@ -697,8 +697,8 @@ async function scanSymbol(symbol, interval = "1d") {
 
   try {
     const url =
-      `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}` +
-      `&interval=${encodeURIComponent(interval)}&limit=240`;
+      ${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)} +
+      &interval=${encodeURIComponent(interval)}&limit=240;
 
     const raw = await getJSON(url);
 
@@ -960,12 +960,12 @@ function renderSignals() {
 
     /* 詳細資料：預設隱藏 */
     const details = [
-      `${item.date1} → ${item.date2}`,
-      `${item.price1} → ${item.price2}`,
-      `${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)}`,
+      ${item.date1} → ${item.date2},
+      ${item.price1} → ${item.price2},
+      ${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)},
       item.rsi == null ? "—" : item.rsi.toFixed(1),
       item.rsiStatus,
-      item.rsiDays ? `第 ${item.rsiDays} 根 K 線` : "—"
+      item.rsiDays ? 第 ${item.rsiDays} 根 K 線 : "—"
     ];
 
     for (const value of details) {
@@ -1191,9 +1191,9 @@ $("scan").addEventListener("click", async () => {
       }
 
       $("status").textContent =
-        `掃描進度：${i + 1}/${total}` +
-        `\n日線有效背離：${allSignals.length}` +
-        `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
+        掃描進度：${i + 1}/${total} +
+        \n日線有效背離：${allSignals.length} +
+        \n資金費率：${fundingError ? "取得失敗" : "已取得"};
 
       /* 稍微放慢請求速度 */
       await sleep(120);
@@ -1203,9 +1203,9 @@ $("scan").addEventListener("click", async () => {
     renderAudit();
 
     $("status").textContent =
-      `掃描完成` +
-      `\n日線有效背離：${allSignals.length}` +
-      `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
+      掃描完成 +
+      \n日線有效背離：${allSignals.length} +
+      \n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"};
 
     $("exportSignals").disabled = false;
     $("exportAudit").disabled = false;
@@ -1252,11 +1252,11 @@ function median(values) {
 
 function formatPct(value, digits = 2) {
   if (!Number.isFinite(value)) return "無資料";
-  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+  return ${value > 0 ? "+" : ""}${value.toFixed(digits)}%;
 }
 
 function formatRatio(value) {
-  return Number.isFinite(value) ? `${value.toFixed(2)} 倍` : "無資料";
+  return Number.isFinite(value) ? ${value.toFixed(2)} 倍 : "無資料";
 }
 
 function formatLocalTime(timestamp) {
@@ -1370,9 +1370,9 @@ async function enrichAnomalyCandidate(item, liquidity = {}) {
   const oneHourBefore = eventTime - 60 * 60 * 1000;
   const sevenDaysBefore = eventTime - 7 * 24 * 60 * 60 * 1000;
   const tasks = await Promise.allSettled([
-    getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`),
-    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100`),
-    getJSON(`${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`)
+    getJSON(${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12),
+    getJSON(${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100),
+    getJSON(${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12)
   ]);
 
   item.oiChange = null;
@@ -1424,10 +1424,10 @@ async function enrichAnomalyCandidate(item, liquidity = {}) {
   }
 
   item.fundingDisplay = Number.isFinite(item.fundingRate)
-    ? `${item.fundingRate > 0 ? "+" : ""}${item.fundingRate.toFixed(4)}%（事件前最近結算 ${formatLocalTime(item.fundingTime)}）`
+    ? ${item.fundingRate > 0 ? "+" : ""}${item.fundingRate.toFixed(4)}%（事件前最近結算 ${formatLocalTime(item.fundingTime)}）
     : "無歷史資料";
   item.takerDisplay = Number.isFinite(item.takerRatio)
-    ? `${item.takerRatio.toFixed(3)}（買／賣）`
+    ? ${item.takerRatio.toFixed(3)}（買／賣）
     : "無資料";
   item.oiNote = item.oiNote || "無資料";
   return item;
@@ -1469,13 +1469,6 @@ function anomalySignalClass(signal) {
   return "signal-watch";
 }
 
-// 異常波動前兆掃描：畫面與 CSV 統一只允許 80 分（含）以上。
-function getVisibleAnomalyRows() {
-  return anomalyState.rows.filter(item =>
-    Number.isFinite(item.score) && item.score >= 80
-  );
-}
-
 function renderAnomalyRows() {
   const body = $("anomalyResults");
   body.replaceChildren();
@@ -1487,7 +1480,8 @@ function renderAnomalyRows() {
     if (signal.includes("下跌延續")) return 4;
     return 3;
   };
-  const rows = [...getVisibleAnomalyRows()].sort((a,b) =>
+  // 只顯示評分 80 分以上（含 80）；79 分以下不列入畫面。
+  const rows = anomalyState.rows.filter(item => Number.isFinite(item.score) && item.score >= 80).sort((a,b) =>
     priority(a.signal)-priority(b.signal) ||
     (b.volumeRatio-a.volumeRatio) ||
     (b.rangeRatio-a.rangeRatio)
@@ -1497,19 +1491,19 @@ function renderAnomalyRows() {
     const tr = document.createElement("tr");
     const cells = [
       {value:item.symbol},
-      {value:`${item.tier || "待評分"}（${Number.isFinite(item.score) ? item.score : "—"}）`, cls:item.tier === "A+ 菁英" ? "signal-up" : item.hardPass ? "signal-watch" : "muted"},
+      {value:${item.tier || "待評分"}（${Number.isFinite(item.score) ? item.score : "—"}）, cls:item.tier === "A+ 菁英" ? "signal-up" : item.hardPass ? "signal-watch" : "muted"},
       {value:item.signal, cls:anomalySignalClass(item.signal)},
       {value:formatLocalTime(item.eventTime)},
       {value:formatPct(item.changePct)},
-      {value:`${item.rangeRatio.toFixed(2)} 倍（${item.rangePct.toFixed(2)}%）`},
-      {value:`${item.volumeRatio.toFixed(2)} 倍（${item.quoteVolume.toLocaleString("en-US",{maximumFractionDigits:0})} USDT）`},
+      {value:${item.rangeRatio.toFixed(2)} 倍（${item.rangePct.toFixed(2)}%）},
+      {value:${item.volumeRatio.toFixed(2)} 倍（${item.quoteVolume.toLocaleString("en-US",{maximumFractionDigits:0})} USDT）},
       {value:formatRatio(item.tradesRatio)},
-      {value:Number.isFinite(item.quoteVolume24h) ? `${(item.quoteVolume24h/1e6).toFixed(2)}M USDT` : "無資料"},
-      {value:Number.isFinite(item.spreadPct) ? `${item.spreadPct.toFixed(3)}%` : "無資料"},
+      {value:Number.isFinite(item.quoteVolume24h) ? ${(item.quoteVolume24h/1e6).toFixed(2)}M USDT : "無資料"},
+      {value:Number.isFinite(item.spreadPct) ? ${item.spreadPct.toFixed(3)}% : "無資料"},
       {value:item.oiNote || "無資料", cls:Number.isFinite(item.oiChange) ? (item.oiChange < 0 ? "metric-bad" : "metric-good") : "muted"},
       {value:item.fundingDisplay || "無歷史資料"},
       {value:item.takerDisplay || "無資料"},
-      {value:item.explanation + (item.dataNotes?.length ? `；缺少：${item.dataNotes.join("、")}` : ""), cls:"small-note"}
+      {value:item.explanation + (item.dataNotes?.length ? ；缺少：${item.dataNotes.join("、")} : ""), cls:"small-note"}
     ];
     for (const cell of cells) {
       const td = document.createElement("td");
@@ -1525,7 +1519,7 @@ $("exportAnomaly").addEventListener("click", () => {
   downloadCSV(
     "binance_anomaly_watchlist.csv",
     ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
-    getVisibleAnomalyRows().map(x => [
+    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).map(x => [
       x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
       x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
       formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
@@ -1547,9 +1541,9 @@ $("scanAnomaly").addEventListener("click", async () => {
 
   try {
     $("anomalyStatus").textContent = "正在取得 Binance USDT 永續合約清單……";
-    const info = await getJSON(`${API}/fapi/v1/exchangeInfo`);
-    const ticker24h = await getJSON(`${API}/fapi/v1/ticker/24hr`);
-    const bookTicker = await getJSON(`${API}/fapi/v1/ticker/bookTicker`);
+    const info = await getJSON(${API}/fapi/v1/exchangeInfo);
+    const ticker24h = await getJSON(${API}/fapi/v1/ticker/24hr);
+    const bookTicker = await getJSON(${API}/fapi/v1/ticker/bookTicker);
     const liquidityMap = new Map();
     const bookMap = new Map();
     if (Array.isArray(ticker24h)) for (const t of ticker24h) liquidityMap.set(t.symbol, Number(t.quoteVolume));
@@ -1564,22 +1558,22 @@ $("scanAnomaly").addEventListener("click", async () => {
     const errors = [];
     let completed = 0;
 
-    $("anomalyStatus").textContent = `第一階段：掃描 ${symbols.length} 個 USDT 永續合約的已收盤 15 分鐘 K 線（事件追蹤，不代表可在大行情前預測）……`;
+    $("anomalyStatus").textContent = 第一階段：掃描 ${symbols.length} 個 USDT 永續合約的已收盤 15 分鐘 K 線（事件追蹤，不代表可在大行情前預測）……;
 
     await mapWithConcurrency(symbols, 5, async symbol => {
       try {
-        const raw = await getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=60`);
+        const raw = await getJSON(${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=60);
         const candidate = analyzeAnomalyCandles(symbol, raw, rangeThreshold, volumeThreshold);
         if (candidate) found.push(candidate);
       } catch (error) {
-        errors.push(`${symbol}: ${String(error.message || error)}`);
+        errors.push(${symbol}: ${String(error.message || error)});
       } finally {
         completed++;
         if (completed % 25 === 0 || completed === symbols.length) {
           $("anomalyStatus").textContent =
-            `第一階段：${completed}/${symbols.length}\n` +
-            `已發現異常候選：${found.length}\n` +
-            `K 線請求失敗：${errors.length}`;
+            第一階段：${completed}/${symbols.length}\n +
+            已發現異常候選：${found.length}\n +
+            K 線請求失敗：${errors.length};
         }
       }
     });
@@ -1590,7 +1584,7 @@ $("scanAnomaly").addEventListener("click", async () => {
     anomalyState.audit = {scanned:symbols.length, candidates:found.length, enriched:0, errors:errors.length};
 
     $("anomalyStatus").textContent =
-      `第二階段：找到 ${found.length} 個異常候選，正在補查前 ${shortlist.length} 個候選的 OI、歷史資金費率與主動買賣比……`;
+      第二階段：找到 ${found.length} 個異常候選，正在補查前 ${shortlist.length} 個候選的 OI、歷史資金費率與主動買賣比……;
 
     let enrichedCount = 0;
     await mapWithConcurrency(shortlist, 3, async item => {
@@ -1608,27 +1602,26 @@ $("scanAnomaly").addEventListener("click", async () => {
         anomalyState.audit.enriched = enrichedCount;
         if (enrichedCount % 5 === 0 || enrichedCount === shortlist.length) {
           $("anomalyStatus").textContent =
-            `第二階段：${enrichedCount}/${shortlist.length}\n` +
-            `異常候選總數：${found.length}\n` +
-            `K 線請求失敗：${errors.length}`;
+            第二階段：${enrichedCount}/${shortlist.length}\n +
+            異常候選總數：${found.length}\n +
+            K 線請求失敗：${errors.length};
         }
       }
     });
 
     renderAnomalyRows();
-    $("exportAnomaly").disabled = getVisibleAnomalyRows().length === 0;
+    $("exportAnomaly").disabled = anomalyState.rows.length === 0;
     $("anomalyStatus").textContent =
-      `異常掃描完成\n` +
-      `掃描合約：${symbols.length}\n` +
-      `符合第一關異常條件：${found.length}\n` +
-      `通過硬性條件：${anomalyState.rows.filter(x => x.hardPass).length}\n` +
-      `畫面顯示（80 分以上）：${getVisibleAnomalyRows().length} 筆\n` +
-      `A+ 菁英候選（80 分以上）：${getVisibleAnomalyRows().filter(x => x.tier === "A+ 菁英").length}\n` +
-      `A 級觀察（80 分以上）：${getVisibleAnomalyRows().filter(x => x.tier === "A 級觀察").length}\n` +
-      `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
-      `K 線請求失敗：${errors.length}\n` +
-      `第一階段候選：${shortlist.length} 筆；畫面及 CSV 僅顯示 80 分以上，79 分以下不顯示\n` +
-      `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
+      異常掃描完成\n +
+      掃描合約：${symbols.length}\n +
+      符合第一關異常條件：${found.length}\n +
+      通過硬性條件：${anomalyState.rows.filter(x => x.hardPass).length}\n +
+      A+ 菁英候選：${anomalyState.rows.filter(x => x.tier === "A+ 菁英").length}\n +
+      A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n +
+      已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n +
+      K 線請求失敗：${errors.length}\n +
+      顯示評分 80 分以上：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).length} 筆（79 分以下不顯示；按振幅倍數 × 成交額倍數排序）\n +
+      注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。;
 
   } catch (error) {
     $("anomalyStatus").textContent = "異常掃描中止：" + String(error.message || error);
