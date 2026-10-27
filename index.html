@@ -631,10 +631,6 @@ function findSignals(
     scanZeroAxis(scanCursor, p2);
     scanCursor = p2 + 1;
 
-    const gap = p2 - p1;
-
-    if (gap < 5 || gap > 60) continue;
-
     hadGap = true;
 
     const valid = isTop
@@ -679,7 +675,7 @@ function findSignals(
   if (activeSignal) {
     found.push(activeSignal);
   } else if (!hadGap) {
-    audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
+    audit.reasons.push(name + "：配對不足，無法比較");
   } else if (!hadDivergence) {
     audit.reasons.push(name + "：配對不符合背離條件");
   } else {
