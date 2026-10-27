@@ -1201,80 +1201,23 @@ $("scan").addEventListener("click", async () => {
     for (let i = 0; i < total; i++) {
       const symbol = symbols[i];
 
-      /* 第一步：日線 */
-      const daily = await scanSymbol(symbol, "1d");
-      allAudit.push(daily.audit);
+     
+/* 只掃描日線，不再執行 4H 掃描或共振判斷 */
+const daily = await scanSymbol(symbol, "1d");
+allAudit.push(daily.audit);
 
-      if (daily.signals.length) {
-        /*
-         * 第二步：只有日線有有效背離，
-         * 才額外掃描 4 小時確認。
-         */
-        const fourHour = await scanSymbol(symbol, "4h");
-
-        for (const dailySignal of daily.signals) {
-          if (
-            fourHour.audit.status === "請求失敗"
-          ) {
-            dailySignal.resonance = "4H 資料失敗";
-            dailySignal.resonanceRank = -1;
-
-          } else if (
-            fourHour.audit.status === "資料不足"
-          ) {
-            dailySignal.resonance = "4H 資料不足";
-            dailySignal.resonanceRank = -1;
-
-          } else {
-            /*
-             * 共振只承認近期 4H 背離：轉折點必須落在最近 6 根已收盤 4H K 線內。
-             * 避免把 40 天掃描範圍內很久以前的背離誤標成「目前共振」。
-             * pivots 需要右側 2 根 K 線確認，因此最新可確認轉折點通常會落後最新 K 線 2 根。
-             */
-            const recent4hSignals = fourHour.signals.filter(
-              signal => Number.isInteger(signal.index2) &&
-                signal.index2 >= fourHour.audit.closedCandles - 7
-            );
-
-            const sameDirection = recent4hSignals.some(
-              signal => signal.signal === dailySignal.signal
-            );
-
-            const oppositeDirection = recent4hSignals.some(
-              signal => signal.signal !== dailySignal.signal
-            );
-
-            if (sameDirection) {
-              dailySignal.resonance = "4H 同方向共振";
-              dailySignal.resonanceRank = 2;
-
-            } else if (oppositeDirection) {
-              dailySignal.resonance = "4H 方向不一致";
-              dailySignal.resonanceRank = 0;
-
-            } else {
-              dailySignal.resonance = "4H 未共振";
-              dailySignal.resonanceRank = 1;
-            }
-          }
-
-          allSignals.push(dailySignal);
-        }
-      }
+for (const dailySignal of daily.signals) {
+  allSignals.push(dailySignal);
+}
 
       if ((i + 1) % 5 === 0 || i === total - 1) {
         renderAudit();
         renderSignals();
       }
 
-      const resonanceCount = allSignals.filter(
-        item => item.resonance === "4H 同方向共振"
-      ).length;
-
-      $("status").textContent =
+            $("status").textContent =
         `掃描進度：${i + 1}/${total}` +
         `\n日線有效背離：${allSignals.length}` +
-        `\n4H 同方向共振：${resonanceCount}` +
         `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
 
       /* 稍微放慢請求速度 */
@@ -1284,19 +1227,9 @@ $("scan").addEventListener("click", async () => {
     renderSignals();
     renderAudit();
 
-    const resonanceCount = allSignals.filter(
-      item => item.resonance === "4H 同方向共振"
-    ).length;
-
-    const mismatchCount = allSignals.filter(
-      item => item.resonance === "4H 方向不一致"
-    ).length;
-
-    $("status").textContent =
+       $("status").textContent =
       `掃描完成` +
       `\n日線有效背離：${allSignals.length}` +
-      `\n4H 同方向共振：${resonanceCount}` +
-      `\n4H 方向不一致：${mismatchCount}` +
       `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
 
     $("exportSignals").disabled = false;
