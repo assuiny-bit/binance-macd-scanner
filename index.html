@@ -514,38 +514,31 @@ function pivots(values, kind, left = 2, right = 2) {
 
 /* 將價格轉折點配對到附近的 DIF 轉折點 */
 function pairPivots(pricePivots, difPivots) {
-  const candidates = [];
+  const pairs = [];
+  let lastDifIndex = -1;
 
   for (const p of pricePivots) {
+    let bestDifIndex = -1;
+    let bestDistance = Infinity;
+
     for (const d of difPivots) {
+      if (d <= lastDifIndex) continue;
+
       const distance = Math.abs(p - d);
 
-      if (distance <= 2) {
-        candidates.push({ p, d, distance });
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestDifIndex = d;
       }
+    }
+
+    if (bestDifIndex !== -1) {
+      pairs.push([p, bestDifIndex]);
+      lastDifIndex = bestDifIndex;
     }
   }
 
-  candidates.sort((a, b) =>
-    a.distance - b.distance ||
-    a.p - b.p ||
-    a.d - b.d
-  );
-
-  const usedPrice = new Set();
-  const usedDif = new Set();
-  const pairs = [];
-
-  for (const item of candidates) {
-    if (usedPrice.has(item.p) || usedDif.has(item.d)) continue;
-
-    usedPrice.add(item.p);
-    usedDif.add(item.d);
-
-    pairs.push([item.p, item.d]);
-  }
-
-  return pairs.sort((a, b) => a[0] - b[0]);
+  return pairs;
 }
 
 function baseAudit(symbol, interval) {
