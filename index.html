@@ -1480,7 +1480,8 @@ function renderAnomalyRows() {
     if (signal.includes("下跌延續")) return 4;
     return 3;
   };
-  const rows = [...anomalyState.rows].sort((a,b) =>
+  // 只顯示評分 80 分以上（含 80）；79 分以下不列入畫面。
+  const rows = anomalyState.rows.filter(item => Number.isFinite(item.score) && item.score >= 80).sort((a,b) =>
     priority(a.signal)-priority(b.signal) ||
     (b.volumeRatio-a.volumeRatio) ||
     (b.rangeRatio-a.rangeRatio)
@@ -1518,7 +1519,7 @@ $("exportAnomaly").addEventListener("click", () => {
   downloadCSV(
     "binance_anomaly_watchlist.csv",
     ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
-    anomalyState.rows.map(x => [
+    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).map(x => [
       x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
       x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
       formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
@@ -1619,7 +1620,7 @@ $("scanAnomaly").addEventListener("click", async () => {
       `A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n` +
       `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
       `K 線請求失敗：${errors.length}\n` +
-      `顯示前 ${shortlist.length} 名（按振幅倍數 × 成交額倍數排序）\n` +
+      `顯示評分 80 分以上：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).length} 筆（79 分以下不顯示；按振幅倍數 × 成交額倍數排序）\n` +
       `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
 
   } catch (error) {
