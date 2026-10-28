@@ -95,6 +95,18 @@ th {
 
 .results-detail { display: none; }
 
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover { text-decoration: underline; }
+
+th.sortable:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: -2px;
+}
+
 .up { color: var(--green); }
 .down { color: var(--red); }
 .warn { color: var(--orange); }
@@ -205,10 +217,10 @@ summary {
     <table>
       <thead>
         <tr>
-          <th>幣種</th>
-          <th>日線背離</th>
-          <th>資金費率</th>
-          <th>下一次結算時間</th>
+          <th class="sortable" data-sort-key="symbol" tabindex="0" role="button" aria-label="依幣種排序">幣種 ↕</th>
+          <th class="sortable" data-sort-key="signal" tabindex="0" role="button" aria-label="依日線背離排序">日線背離 ↕</th>
+          <th class="sortable" data-sort-key="funding" tabindex="0" role="button" aria-label="依資金費率排序">資金費率 ↕</th>
+          <th class="sortable" data-sort-key="nextTime" tabindex="0" role="button" aria-label="依下一次結算時間排序">下一次結算時間 ↕</th>
           <th class="results-detail">背離日期</th>
           <th class="results-detail">價格變化</th>
           <th class="results-detail">DIF 變化</th>
@@ -357,6 +369,8 @@ let allSignals = [];
 let allAudit = [];
 let fundingMap = new Map();
 let isRunning = false;
+let resultsSortKey = "symbol";
+let resultsSortDirection = 1;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -563,13 +577,13 @@ function baseAudit(symbol, interval) {
  * 1. 價格高點抬高
  * 2. DIF 高點降低
  * 3. 兩個 DIF 高點都在零軸上方
- * 4. DEA 觸及或跌破零軸後解除舊訊號
+ * 4. DIF 或 DEA 任一觸及或穿越零軸後解除舊訊號
  *
  * 底背離：
  * 1. 價格低點降低
  * 2. DIF 低點抬高
  * 3. 兩個 DIF 低點都在零軸下方
- * 4. DEA 觸及或突破零軸後解除舊訊號
+ * 4. DIF 或 DEA 任一觸及或穿越零軸後解除舊訊號
  */
 function findSignals(
   kind,
@@ -607,11 +621,17 @@ function findSignals(
       i <= to && i < dea.length;
       i++
     ) {
-      const value = dea[i];
+      const difValue = dif[i];
+      const deaValue = dea[i];
 
-      if (value === null || !Number.isFinite(value)) continue;
+      if (
+        !Number.isFinite(difValue) ||
+        !Number.isFinite(deaValue)
+      ) continue;
 
-      const reset = isTop ? value <= 0 : value >= 0;
+      const reset = isTop
+        ? difValue <= 0 || deaValue <= 0
+        : difValue >= 0 || deaValue >= 0;
 
       if (reset) {
         lastResetIndex = i;
@@ -680,7 +700,7 @@ function findSignals(
     audit.reasons.push(name + "：配對不符合背離條件");
   } else {
     audit.reasons.push(
-      name + "：背離已被 DEA 零軸條件解除，或尚未形成新背離"
+      name + "：背離已被 DIF／DEA 零軸條件解除，或尚未形成新背離"
     );
   }
 
@@ -899,22 +919,88 @@ function downloadCSV(filename, headers, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/* 主結果表排序：可點擊前四個欄位標題切換升冪／降冪 */
+function compareResultValues(a, b, key) {
+  if (key === "symbol") {
+    return a.symbol.localeCompare(b.symbol, "en", { numeric: true });
+  }
+
+  if (key === "signal") {
+    const rank = value => value.signal.includes("頂") ? 0 : 1;
+    return rank(a) - rank(b) || a.symbol.localeCompare(b.symbol);
+  }
+
+  if (key === "funding") {
+    const getRate = item => fundingMap.get(item.symbol)?.rate;
+    const rateA = getRate(a);
+    const rateB = getRate(b);
+    if (!Number.isFinite(rateA) && !Number.isFinite(rateB)) return 0;
+    if (!Number.isFinite(rateA)) return 1;
+    if (!Number.isFinite(rateB)) return -1;
+    return rateA - rateB;
+  }
+
+  if (key === "nextTime") {
+    const getTime = item => fundingMap.get(item.symbol)?.nextTime;
+    const timeA = getTime(a);
+    const timeB = getTime(b);
+    if (!Number.isFinite(timeA) && !Number.isFinite(timeB)) return 0;
+    if (!Number.isFinite(timeA)) return 1;
+    if (!Number.isFinite(timeB)) return -1;
+    return timeA - timeB;
+  }
+
+  return 0;
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll("th[data-sort-key]").forEach(th => {
+    const key = th.dataset.sortKey;
+    const base = th.textContent.replace(/[↑↓↕]/g, "").trim();
+    th.textContent = base + (key === resultsSortKey
+      ? (resultsSortDirection === 1 ? " ↑" : " ↓")
+      : " ↕");
+    th.setAttribute("aria-sort", key === resultsSortKey
+      ? (resultsSortDirection === 1 ? "ascending" : "descending")
+      : "none");
+  });
+}
+
+function handleResultsSort(th) {
+  const key = th.dataset.sortKey;
+  if (!key) return;
+  if (resultsSortKey === key) {
+    resultsSortDirection *= -1;
+  } else {
+    resultsSortKey = key;
+    resultsSortDirection = 1;
+  }
+  renderSignals();
+}
+
+document.querySelectorAll("th[data-sort-key]").forEach(th => {
+  th.addEventListener("click", () => handleResultsSort(th));
+  th.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleResultsSort(th);
+    }
+  });
+});
+
 /* 顯示主搜尋結果 */
 function renderSignals() {
   const body = $("results");
   body.replaceChildren();
 
-  /* 頂背離與底背離分組 */
-  allSignals.sort((a, b) => {
-    const directionA = a.signal.includes("頂") ? 0 : 1;
-    const directionB = b.signal.includes("頂") ? 0 : 1;
+  const sortedSignals = [...allSignals].sort((a, b) =>
+    compareResultValues(a, b, resultsSortKey) * resultsSortDirection ||
+    a.symbol.localeCompare(b.symbol) ||
+    b.date2.localeCompare(a.date2)
+  );
+  updateSortHeaders();
 
-    return directionA - directionB ||
-      a.symbol.localeCompare(b.symbol) ||
-      b.date2.localeCompare(a.date2);
-  });
-
-  for (const item of allSignals) {
+  for (const item of sortedSignals) {
     const tr = document.createElement("tr");
 
     /* 幣種 */
