@@ -1480,9 +1480,9 @@ function renderAnomalyRows() {
     if (signal.includes("下跌延續")) return 4;
     return 3;
   };
-  // 顯示規則：評分 80 分以上一律顯示；75–79 分僅在成交額倍數 volumeRatio >= 9 時例外顯示；74 分（含）以下永不顯示。
+  // 顯示規則：80 分以上直接顯示；70–79 分須成交額倍數 >= 8 才例外顯示；69 分（含）以下強制不顯示。
   const rows = anomalyState.rows
-    .filter(item => Number.isFinite(item.score) && (item.score >= 80 || (item.score >= 75 && item.score <= 79 && Number.isFinite(item.volumeRatio) && item.volumeRatio >= 9)))
+    .filter(item => Number.isFinite(item.score) && (item.score >= 80 || (item.score >= 70 && item.score <= 79 && Number.isFinite(item.volumeRatio) && item.volumeRatio >= 8)))
     .sort((a, b) =>
       (b.score - a.score) ||
       priority(a.signal) - priority(b.signal) ||
@@ -1522,7 +1522,7 @@ $("exportAnomaly").addEventListener("click", () => {
   downloadCSV(
     "binance_anomaly_watchlist.csv",
     ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
-    anomalyState.rows.filter(x => Number.isFinite(x.score) && (x.score >= 80 || (x.score >= 75 && x.score <= 79 && Number.isFinite(x.volumeRatio) && x.volumeRatio >= 9))).map(x => [
+    anomalyState.rows.filter(x => Number.isFinite(x.score) && (x.score >= 80 || (x.score >= 70 && x.score <= 79 && Number.isFinite(x.volumeRatio) && x.volumeRatio >= 8))).map(x => [
       x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
       x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
       formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
@@ -1623,7 +1623,7 @@ $("scanAnomaly").addEventListener("click", async () => {
       `A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n` +
       `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
       `K 線請求失敗：${errors.length}\n` +
-      `顯示筆數：${anomalyState.rows.filter(x => Number.isFinite(x.score) && (x.score >= 80 || (x.score >= 75 && x.score <= 79 && Number.isFinite(x.volumeRatio) && x.volumeRatio >= 9))).length} 筆（80 分以上一律顯示；75–79 分僅成交額倍數 >= 9 倍例外顯示；74 分含以下一律不顯示；按評分由高至低排序）\n` +
+      `顯示筆數：${anomalyState.rows.filter(x => Number.isFinite(x.score) && (x.score >= 80 || (x.score >= 70 && x.score <= 79 && Number.isFinite(x.volumeRatio) && x.volumeRatio >= 8))).length} 筆（80 分以上直接顯示；70–79 分須成交額倍數 >= 8 才顯示；69 分以下強制不顯示；按評分由高至低排序）\n` +
       `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
 
   } catch (error) {
