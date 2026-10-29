@@ -956,6 +956,7 @@ function renderSignals() {
     signalText.textContent = item.signal.replace("MACD", "");
 
     signalCell.appendChild(signalText);
+    tr.appendChild(signalCell);
 
     /* 資金費率 */
     const funding = formatFunding(item.symbol);
