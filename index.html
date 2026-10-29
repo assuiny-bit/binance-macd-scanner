@@ -184,13 +184,6 @@ summary {
 .small-note { font-size:11px; color:var(--muted); white-space:normal; min-width:180px; max-width:300px; }
 #anomalyStatus { margin:14px 4px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; }
 #anomalyResults td { vertical-align:top; }
-.sort-header { appearance:none; border:0; background:transparent; color:inherit; font:inherit; font-weight:700; cursor:pointer; padding:3px 2px; white-space:nowrap; }
-.sort-header:hover, .sort-header:focus-visible { text-decoration:underline; color:var(--accent, #2563eb); }
-.sort-mark { display:inline-block; margin-left:3px; opacity:.65; font-size:.85em; }
-.sort-header[aria-sort="ascending"] .sort-mark::after { content:"↑"; }
-.sort-header[aria-sort="descending"] .sort-mark::after { content:"↓"; }
-.sort-header[aria-sort="ascending"] .sort-mark, .sort-header[aria-sort="descending"] .sort-mark { font-size:0; }
-.sort-header[aria-sort="ascending"] .sort-mark::after, .sort-header[aria-sort="descending"] .sort-mark::after { font-size:14px; }
 
 </style>
 </head>
@@ -200,7 +193,7 @@ summary {
 <h1>幣安 MACD 背離掃描器</h1>
 
 <p>
-  日線有效背離｜4 小時同方向共振｜資金費率｜USDT 永續合約
+  日線 MACD 背離｜資金費率｜USDT 永續合約
 </p>
 
 <div class="module-tabs" role="tablist" aria-label="掃描模組">
@@ -216,21 +209,21 @@ summary {
   <div id="status">尚未開始掃描。</div>
 
   <div class="note">
-    日線是主要篩選週期；只有日線存在有效背離時，才檢查 4 小時共振。4H 共振僅承認轉折點位於最近 6 根已收盤 4H K 線內的同方向背離，避免舊訊號誤判為目前共振。
+    本掃描器只檢查已收盤的日線 K 線。
     資金費率來自 Binance 公開行情 API。正資金費率通常代表多方支付空方，
     負資金費率則通常代表空方支付多方。
   </div>
 </div>
 
 <div class="panel">
-  <strong>目前有效日線背離｜共振優先排序</strong>
+  <strong>目前有效日線背離</strong>
 
   <div class="wrap">
     <table>
       <thead>
         <tr>
           <th>幣種</th>
-          <th>背離／4H 共振</th>
+          <th>背離訊號</th>
           <th>資金費率</th>
           <th>下一次結算時間</th>
           <th class="results-detail">背離日期</th>
@@ -292,7 +285,7 @@ summary {
 </details>
 
 <p class="note">
-  注意：背離及共振只是技術訊號，不保證價格反轉。
+  注意：MACD 日線背離只是技術訊號，不保證價格反轉。
   資金費率會隨市場變動；本程式只讀取公開資料，不會替你下單。
 </p>
 
@@ -332,20 +325,20 @@ summary {
       <table>
         <thead>
           <tr>
-            <th><button type="button" class="sort-header" data-sort-key="symbol">幣種 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="score">等級／分數 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="signal">分類 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="eventTime">異常 K 棒時間（台灣） <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="changePct">該根漲跌幅 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="rangeRatio">振幅／基準 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="volumeRatio">成交額／基準 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="tradesRatio">成交筆數／基準 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="quoteVolume24h">24H 成交額 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="spreadPct">買賣價差 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="oiChange">事件前 1 小時 OI 變化 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="fundingRate">歷史資金費率 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="takerRatio">主動買賣比 <span class="sort-mark">↕</span></button></th>
-            <th><button type="button" class="sort-header" data-sort-key="explanation">觀察說明 <span class="sort-mark">↕</span></button></th>
+            <th>幣種</th>
+            <th>等級／分數</th>
+            <th>分類</th>
+            <th>異常 K 棒時間（台灣）</th>
+            <th>該根漲跌幅</th>
+            <th>振幅／基準</th>
+            <th>成交額／基準</th>
+            <th>成交筆數／基準</th>
+            <th>24H 成交額</th>
+            <th>買賣價差</th>
+            <th>事件前 1 小時 OI 變化</th>
+            <th>歷史資金費率</th>
+            <th>主動買賣比</th>
+            <th>觀察說明</th>
           </tr>
         </thead>
         <tbody id="anomalyResults"></tbody>
@@ -527,38 +520,29 @@ function pivots(values, kind, left = 2, right = 2) {
 
 /* 將價格轉折點配對到附近的 DIF 轉折點 */
 function pairPivots(pricePivots, difPivots) {
-  const candidates = [];
+  const pairs = [];
+  let lastDifIndex = -1;
 
   for (const p of pricePivots) {
-    for (const d of difPivots) {
-      const distance = Math.abs(p - d);
+    let bestDifIndex = -1;
+    let bestDistance = Infinity;
 
-      if (distance <= 2) {
-        candidates.push({ p, d, distance });
+    for (const d of difPivots) {
+      if (d <= lastDifIndex) continue;
+      const distance = Math.abs(p - d);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestDifIndex = d;
       }
+    }
+
+    if (bestDifIndex !== -1) {
+      pairs.push([p, bestDifIndex]);
+      lastDifIndex = bestDifIndex;
     }
   }
 
-  candidates.sort((a, b) =>
-    a.distance - b.distance ||
-    a.p - b.p ||
-    a.d - b.d
-  );
-
-  const usedPrice = new Set();
-  const usedDif = new Set();
-  const pairs = [];
-
-  for (const item of candidates) {
-    if (usedPrice.has(item.p) || usedDif.has(item.d)) continue;
-
-    usedPrice.add(item.p);
-    usedDif.add(item.d);
-
-    pairs.push([item.p, item.d]);
-  }
-
-  return pairs.sort((a, b) => a[0] - b[0]);
+  return pairs;
 }
 
 function baseAudit(symbol, interval) {
@@ -651,10 +635,6 @@ function findSignals(
     scanZeroAxis(scanCursor, p2);
     scanCursor = p2 + 1;
 
-    const gap = p2 - p1;
-
-    if (gap < 5 || gap > 60) continue;
-
     hadGap = true;
 
     const valid = isTop
@@ -699,7 +679,7 @@ function findSignals(
   if (activeSignal) {
     found.push(activeSignal);
   } else if (!hadGap) {
-    audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
+    audit.reasons.push(name + "：配對不足，無法比較");
   } else if (!hadDivergence) {
     audit.reasons.push(name + "：配對不符合背離條件");
   } else {
@@ -711,14 +691,14 @@ function findSignals(
   return found;
 }
 
-/* 掃描單一幣種的日線或 4 小時 K 線 */
+/* 掃描單一幣種指定週期的 K 線；主流程只使用日線 */
 async function scanSymbol(symbol, interval = "1d") {
   const audit = baseAudit(symbol, interval);
 
   try {
     const url =
-      `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}` +
-      `&interval=${encodeURIComponent(interval)}&limit=240`;
+      ${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)} +
+      &interval=${encodeURIComponent(interval)}&limit=240;
 
     const raw = await getJSON(url);
 
@@ -928,13 +908,12 @@ function renderSignals() {
   const body = $("results");
   body.replaceChildren();
 
-  /* 頂背離與底背離分組；同方向共振優先 */
+  /* 頂背離與底背離分組；依背離方向及日期排序 */
   allSignals.sort((a, b) => {
     const directionA = a.signal.includes("頂") ? 0 : 1;
     const directionB = b.signal.includes("頂") ? 0 : 1;
 
     return directionA - directionB ||
-      (b.resonanceRank || 0) - (a.resonanceRank || 0) ||
       a.symbol.localeCompare(b.symbol) ||
       b.date2.localeCompare(a.date2);
   });
@@ -947,38 +926,14 @@ function renderSignals() {
     symbolCell.textContent = item.symbol;
     tr.appendChild(symbolCell);
 
-    /* 背離與共振標籤 */
+    /* 背離訊號 */
     const signalCell = document.createElement("td");
     signalCell.className = "signal-cell";
 
     const signalText = document.createElement("span");
-    signalText.className =
-      item.signal.includes("頂") ? "down" : "up";
+    signalText.className = item.signal.includes("頂") ? "down" : "up";
     signalText.textContent = item.signal.replace("MACD", "");
-
     signalCell.appendChild(signalText);
-
-    const badge = document.createElement("span");
-    badge.className = "badge";
-
-    if (item.resonance === "4H 同方向共振") {
-      badge.classList.add("resonance-good");
-      badge.textContent = "4H 同方向共振";
-    } else if (item.resonance === "4H 方向不一致") {
-      badge.classList.add("resonance-mismatch");
-      badge.textContent = "4H 方向不一致";
-    } else if (item.resonance === "4H 資料失敗") {
-      badge.classList.add("resonance-error");
-      badge.textContent = "4H 資料失敗";
-    } else if (item.resonance === "4H 資料不足") {
-      badge.classList.add("resonance-error");
-      badge.textContent = "4H 資料不足";
-    } else {
-      badge.classList.add("resonance-none");
-      badge.textContent = "4H 未共振";
-    }
-
-    signalCell.appendChild(badge);
     tr.appendChild(signalCell);
 
     /* 資金費率 */
@@ -1005,12 +960,12 @@ function renderSignals() {
 
     /* 詳細資料：預設隱藏 */
     const details = [
-      `${item.date1} → ${item.date2}`,
-      `${item.price1} → ${item.price2}`,
-      `${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)}`,
+      ${item.date1} → ${item.date2},
+      ${item.price1} → ${item.price2},
+      ${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)},
       item.rsi == null ? "—" : item.rsi.toFixed(1),
       item.rsiStatus,
-      item.rsiDays ? `第 ${item.rsiDays} 根 K 線` : "—"
+      item.rsiDays ? 第 ${item.rsiDays} 根 K 線 : "—"
     ];
 
     for (const value of details) {
@@ -1096,7 +1051,6 @@ $("exportSignals").addEventListener("click", () => {
     [
       "symbol",
       "daily_signal",
-      "4h_confirmation",
       "funding_rate_percent",
       "next_funding_time",
       "date1",
@@ -1115,7 +1069,6 @@ $("exportSignals").addEventListener("click", () => {
       return [
         item.symbol,
         item.signal,
-        item.resonance || "尚未確認",
         funding.text,
         formatNextTime(funding.nextTime),
         item.date1,
@@ -1225,65 +1178,11 @@ $("scan").addEventListener("click", async () => {
     for (let i = 0; i < total; i++) {
       const symbol = symbols[i];
 
-      /* 第一步：日線 */
+      /* MACD 背離功能只掃描日線（1D） */
       const daily = await scanSymbol(symbol, "1d");
       allAudit.push(daily.audit);
-
-      if (daily.signals.length) {
-        /*
-         * 第二步：只有日線有有效背離，
-         * 才額外掃描 4 小時確認。
-         */
-        const fourHour = await scanSymbol(symbol, "4h");
-
-        for (const dailySignal of daily.signals) {
-          if (
-            fourHour.audit.status === "請求失敗"
-          ) {
-            dailySignal.resonance = "4H 資料失敗";
-            dailySignal.resonanceRank = -1;
-
-          } else if (
-            fourHour.audit.status === "資料不足"
-          ) {
-            dailySignal.resonance = "4H 資料不足";
-            dailySignal.resonanceRank = -1;
-
-          } else {
-            /*
-             * 共振只承認近期 4H 背離：轉折點必須落在最近 6 根已收盤 4H K 線內。
-             * 避免把 40 天掃描範圍內很久以前的背離誤標成「目前共振」。
-             * pivots 需要右側 2 根 K 線確認，因此最新可確認轉折點通常會落後最新 K 線 2 根。
-             */
-            const recent4hSignals = fourHour.signals.filter(
-              signal => Number.isInteger(signal.index2) &&
-                signal.index2 >= fourHour.audit.closedCandles - 7
-            );
-
-            const sameDirection = recent4hSignals.some(
-              signal => signal.signal === dailySignal.signal
-            );
-
-            const oppositeDirection = recent4hSignals.some(
-              signal => signal.signal !== dailySignal.signal
-            );
-
-            if (sameDirection) {
-              dailySignal.resonance = "4H 同方向共振";
-              dailySignal.resonanceRank = 2;
-
-            } else if (oppositeDirection) {
-              dailySignal.resonance = "4H 方向不一致";
-              dailySignal.resonanceRank = 0;
-
-            } else {
-              dailySignal.resonance = "4H 未共振";
-              dailySignal.resonanceRank = 1;
-            }
-          }
-
-          allSignals.push(dailySignal);
-        }
+      for (const dailySignal of daily.signals) {
+        allSignals.push(dailySignal);
       }
 
       if ((i + 1) % 5 === 0 || i === total - 1) {
@@ -1291,15 +1190,10 @@ $("scan").addEventListener("click", async () => {
         renderSignals();
       }
 
-      const resonanceCount = allSignals.filter(
-        item => item.resonance === "4H 同方向共振"
-      ).length;
-
       $("status").textContent =
-        `掃描進度：${i + 1}/${total}` +
-        `\n日線有效背離：${allSignals.length}` +
-        `\n4H 同方向共振：${resonanceCount}` +
-        `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
+        掃描進度：${i + 1}/${total} +
+        \n日線有效背離：${allSignals.length} +
+        \n資金費率：${fundingError ? "取得失敗" : "已取得"};
 
       /* 稍微放慢請求速度 */
       await sleep(120);
@@ -1308,20 +1202,10 @@ $("scan").addEventListener("click", async () => {
     renderSignals();
     renderAudit();
 
-    const resonanceCount = allSignals.filter(
-      item => item.resonance === "4H 同方向共振"
-    ).length;
-
-    const mismatchCount = allSignals.filter(
-      item => item.resonance === "4H 方向不一致"
-    ).length;
-
     $("status").textContent =
-      `掃描完成` +
-      `\n日線有效背離：${allSignals.length}` +
-      `\n4H 同方向共振：${resonanceCount}` +
-      `\n4H 方向不一致：${mismatchCount}` +
-      `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
+      掃描完成 +
+      \n日線有效背離：${allSignals.length} +
+      \n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"};
 
     $("exportSignals").disabled = false;
     $("exportAudit").disabled = false;
@@ -1343,8 +1227,6 @@ $("scan").addEventListener("click", async () => {
 ========================= */
 const anomalyState = {
   running: false,
-  sortKey: null,
-  sortDirection: "asc",
   rows: [],
   audit: { scanned: 0, candidates: 0, enriched: 0, errors: 0 }
 };
@@ -1370,11 +1252,11 @@ function median(values) {
 
 function formatPct(value, digits = 2) {
   if (!Number.isFinite(value)) return "無資料";
-  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+  return ${value > 0 ? "+" : ""}${value.toFixed(digits)}%;
 }
 
 function formatRatio(value) {
-  return Number.isFinite(value) ? `${value.toFixed(2)} 倍` : "無資料";
+  return Number.isFinite(value) ? ${value.toFixed(2)} 倍 : "無資料";
 }
 
 function formatLocalTime(timestamp) {
@@ -1488,9 +1370,9 @@ async function enrichAnomalyCandidate(item, liquidity = {}) {
   const oneHourBefore = eventTime - 60 * 60 * 1000;
   const sevenDaysBefore = eventTime - 7 * 24 * 60 * 60 * 1000;
   const tasks = await Promise.allSettled([
-    getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`),
-    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100`),
-    getJSON(`${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`)
+    getJSON(${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12),
+    getJSON(${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100),
+    getJSON(${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12)
   ]);
 
   item.oiChange = null;
@@ -1542,10 +1424,10 @@ async function enrichAnomalyCandidate(item, liquidity = {}) {
   }
 
   item.fundingDisplay = Number.isFinite(item.fundingRate)
-    ? `${item.fundingRate > 0 ? "+" : ""}${item.fundingRate.toFixed(4)}%（事件前最近結算 ${formatLocalTime(item.fundingTime)}）`
+    ? ${item.fundingRate > 0 ? "+" : ""}${item.fundingRate.toFixed(4)}%（事件前最近結算 ${formatLocalTime(item.fundingTime)}）
     : "無歷史資料";
   item.takerDisplay = Number.isFinite(item.takerRatio)
-    ? `${item.takerRatio.toFixed(3)}（買／賣）`
+    ? ${item.takerRatio.toFixed(3)}（買／賣）
     : "無資料";
   item.oiNote = item.oiNote || "無資料";
   return item;
@@ -1577,7 +1459,7 @@ function scoreEliteCandidate(item) {
   if (Number.isFinite(item.fundingRate) && Math.abs(item.fundingRate) <= 0.08) score += 3;
   item.score = Math.round(Math.min(100, score));
   item.hardPass = item.rangeRatio >= 2.5 && item.volumeRatio >= 3 && item.tradesRatio >= 2 && item.quoteVolume24h >= 1e7 && item.spreadPct <= 0.15 && (Math.abs(item.oiChange || 0) >= 2 || (Number.isFinite(item.takerRatio) && (item.takerRatio >= 1.5 || item.takerRatio <= 0.67)));
-  item.tier = !item.hardPass ? "未通過硬性條件" : item.score >= 90 ? "A+ 菁英" : item.score >= 80 ? "A 級觀察" : item.score >= 70 ? "70–79 分觀察" : "未達 70 分";
+  item.tier = !item.hardPass ? "未通過硬性條件" : item.score >= 90 ? "A+ 菁英" : item.score >= 80 ? "A 級觀察" : "未達 80 分";
   return item;
 }
 
@@ -1598,50 +1480,30 @@ function renderAnomalyRows() {
     if (signal.includes("下跌延續")) return 4;
     return 3;
   };
-  const sortKey = anomalyState.sortKey;
-  const rows = [...anomalyState.rows].filter(item => Number.isFinite(item.score) && item.score >= 70).sort((a,b) => {
-    if (!sortKey) {
-      return priority(a.signal)-priority(b.signal) || (b.volumeRatio-a.volumeRatio) || (b.rangeRatio-a.rangeRatio);
-    }
-    let av = a[sortKey], bv = b[sortKey];
-    // 缺失數值放在最後；文字分類以中文／數字符合自然排序。
-    const numericKeys = new Set(["score","eventTime","changePct","rangeRatio","volumeRatio","tradesRatio","quoteVolume24h","spreadPct","oiChange","fundingRate","takerRatio"]);
-    let cmp;
-    if (numericKeys.has(sortKey)) {
-      av = Number(av); bv = Number(bv);
-      const aMissing = !Number.isFinite(av), bMissing = !Number.isFinite(bv);
-      if (aMissing || bMissing) cmp = aMissing === bMissing ? 0 : aMissing ? 1 : -1;
-      else cmp = av - bv;
-    } else {
-      av = String(av ?? ""); bv = String(bv ?? "");
-      cmp = av.localeCompare(bv, "zh-Hant", {numeric:true, sensitivity:"base"});
-    }
-    return anomalyState.sortDirection === "desc" ? -cmp : cmp;
-  });
-  document.querySelectorAll(".sort-header").forEach(button => {
-    const active = button.dataset.sortKey === anomalyState.sortKey;
-    button.setAttribute("aria-sort", active ? (anomalyState.sortDirection === "asc" ? "ascending" : "descending") : "none");
-    const mark = button.querySelector(".sort-mark");
-    if (mark) mark.textContent = active ? (anomalyState.sortDirection === "asc" ? "↑" : "↓") : "↕";
-  });
+  // 只顯示評分 80 分以上（含 80）；79 分以下不列入畫面。
+  const rows = anomalyState.rows.filter(item => Number.isFinite(item.score) && item.score >= 80).sort((a,b) =>
+    priority(a.signal)-priority(b.signal) ||
+    (b.volumeRatio-a.volumeRatio) ||
+    (b.rangeRatio-a.rangeRatio)
+  );
 
   for (const item of rows) {
     const tr = document.createElement("tr");
     const cells = [
       {value:item.symbol},
-      {value:`${item.tier || "待評分"}（${Number.isFinite(item.score) ? item.score : "—"}）`, cls:item.tier === "A+ 菁英" ? "signal-up" : item.hardPass ? "signal-watch" : "muted"},
+      {value:${item.tier || "待評分"}（${Number.isFinite(item.score) ? item.score : "—"}）, cls:item.tier === "A+ 菁英" ? "signal-up" : item.hardPass ? "signal-watch" : "muted"},
       {value:item.signal, cls:anomalySignalClass(item.signal)},
       {value:formatLocalTime(item.eventTime)},
       {value:formatPct(item.changePct)},
-      {value:`${item.rangeRatio.toFixed(2)} 倍（${item.rangePct.toFixed(2)}%）`},
-      {value:`${item.volumeRatio.toFixed(2)} 倍（${item.quoteVolume.toLocaleString("en-US",{maximumFractionDigits:0})} USDT）`},
+      {value:${item.rangeRatio.toFixed(2)} 倍（${item.rangePct.toFixed(2)}%）},
+      {value:${item.volumeRatio.toFixed(2)} 倍（${item.quoteVolume.toLocaleString("en-US",{maximumFractionDigits:0})} USDT）},
       {value:formatRatio(item.tradesRatio)},
-      {value:Number.isFinite(item.quoteVolume24h) ? `${(item.quoteVolume24h/1e6).toFixed(2)}M USDT` : "無資料"},
-      {value:Number.isFinite(item.spreadPct) ? `${item.spreadPct.toFixed(3)}%` : "無資料"},
+      {value:Number.isFinite(item.quoteVolume24h) ? ${(item.quoteVolume24h/1e6).toFixed(2)}M USDT : "無資料"},
+      {value:Number.isFinite(item.spreadPct) ? ${item.spreadPct.toFixed(3)}% : "無資料"},
       {value:item.oiNote || "無資料", cls:Number.isFinite(item.oiChange) ? (item.oiChange < 0 ? "metric-bad" : "metric-good") : "muted"},
       {value:item.fundingDisplay || "無歷史資料"},
       {value:item.takerDisplay || "無資料"},
-      {value:item.explanation + (item.dataNotes?.length ? `；缺少：${item.dataNotes.join("、")}` : ""), cls:"small-note"}
+      {value:item.explanation + (item.dataNotes?.length ? ；缺少：${item.dataNotes.join("、")} : ""), cls:"small-note"}
     ];
     for (const cell of cells) {
       const td = document.createElement("td");
@@ -1653,24 +1515,11 @@ function renderAnomalyRows() {
   }
 }
 
-document.querySelectorAll(".sort-header").forEach(button => {
-  button.addEventListener("click", () => {
-    const key = button.dataset.sortKey;
-    if (anomalyState.sortKey === key) {
-      anomalyState.sortDirection = anomalyState.sortDirection === "asc" ? "desc" : "asc";
-    } else {
-      anomalyState.sortKey = key;
-      anomalyState.sortDirection = "asc";
-    }
-    renderAnomalyRows();
-  });
-});
-
 $("exportAnomaly").addEventListener("click", () => {
   downloadCSV(
     "binance_anomaly_watchlist.csv",
     ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
-    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 70).map(x => [
+    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).map(x => [
       x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
       x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
       formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
@@ -1692,9 +1541,9 @@ $("scanAnomaly").addEventListener("click", async () => {
 
   try {
     $("anomalyStatus").textContent = "正在取得 Binance USDT 永續合約清單……";
-    const info = await getJSON(`${API}/fapi/v1/exchangeInfo`);
-    const ticker24h = await getJSON(`${API}/fapi/v1/ticker/24hr`);
-    const bookTicker = await getJSON(`${API}/fapi/v1/ticker/bookTicker`);
+    const info = await getJSON(${API}/fapi/v1/exchangeInfo);
+    const ticker24h = await getJSON(${API}/fapi/v1/ticker/24hr);
+    const bookTicker = await getJSON(${API}/fapi/v1/ticker/bookTicker);
     const liquidityMap = new Map();
     const bookMap = new Map();
     if (Array.isArray(ticker24h)) for (const t of ticker24h) liquidityMap.set(t.symbol, Number(t.quoteVolume));
@@ -1709,22 +1558,22 @@ $("scanAnomaly").addEventListener("click", async () => {
     const errors = [];
     let completed = 0;
 
-    $("anomalyStatus").textContent = `第一階段：掃描 ${symbols.length} 個 USDT 永續合約的已收盤 15 分鐘 K 線（事件追蹤，不代表可在大行情前預測）……`;
+    $("anomalyStatus").textContent = 第一階段：掃描 ${symbols.length} 個 USDT 永續合約的已收盤 15 分鐘 K 線（事件追蹤，不代表可在大行情前預測）……;
 
     await mapWithConcurrency(symbols, 5, async symbol => {
       try {
-        const raw = await getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=60`);
+        const raw = await getJSON(${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=60);
         const candidate = analyzeAnomalyCandles(symbol, raw, rangeThreshold, volumeThreshold);
         if (candidate) found.push(candidate);
       } catch (error) {
-        errors.push(`${symbol}: ${String(error.message || error)}`);
+        errors.push(${symbol}: ${String(error.message || error)});
       } finally {
         completed++;
         if (completed % 25 === 0 || completed === symbols.length) {
           $("anomalyStatus").textContent =
-            `第一階段：${completed}/${symbols.length}\n` +
-            `已發現異常候選：${found.length}\n` +
-            `K 線請求失敗：${errors.length}`;
+            第一階段：${completed}/${symbols.length}\n +
+            已發現異常候選：${found.length}\n +
+            K 線請求失敗：${errors.length};
         }
       }
     });
@@ -1735,7 +1584,7 @@ $("scanAnomaly").addEventListener("click", async () => {
     anomalyState.audit = {scanned:symbols.length, candidates:found.length, enriched:0, errors:errors.length};
 
     $("anomalyStatus").textContent =
-      `第二階段：找到 ${found.length} 個異常候選，正在補查前 ${shortlist.length} 個候選的 OI、歷史資金費率與主動買賣比……`;
+      第二階段：找到 ${found.length} 個異常候選，正在補查前 ${shortlist.length} 個候選的 OI、歷史資金費率與主動買賣比……;
 
     let enrichedCount = 0;
     await mapWithConcurrency(shortlist, 3, async item => {
@@ -1753,9 +1602,9 @@ $("scanAnomaly").addEventListener("click", async () => {
         anomalyState.audit.enriched = enrichedCount;
         if (enrichedCount % 5 === 0 || enrichedCount === shortlist.length) {
           $("anomalyStatus").textContent =
-            `第二階段：${enrichedCount}/${shortlist.length}\n` +
-            `異常候選總數：${found.length}\n` +
-            `K 線請求失敗：${errors.length}`;
+            第二階段：${enrichedCount}/${shortlist.length}\n +
+            異常候選總數：${found.length}\n +
+            K 線請求失敗：${errors.length};
         }
       }
     });
@@ -1763,18 +1612,16 @@ $("scanAnomaly").addEventListener("click", async () => {
     renderAnomalyRows();
     $("exportAnomaly").disabled = anomalyState.rows.length === 0;
     $("anomalyStatus").textContent =
-      `異常掃描完成\n` +
-      `掃描合約：${symbols.length}\n` +
-      `符合第一關異常條件：${found.length}\n` +
-      `通過硬性條件：${anomalyState.rows.filter(x => x.hardPass).length}\n` +
-      `A+ 菁英候選：${anomalyState.rows.filter(x => x.tier === "A+ 菁英").length}\n` +
-      `A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n` +
-      `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
-      `K 線請求失敗：${errors.length}\n` +
-      `評分 70 分以上顯示；69 分以下隱藏\n` +
-      `符合顯示評分門檻：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 70).length} 個\n` +
-      `顯示名單依目前選擇的欄位排序（初始按振幅倍數 × 成交額倍數）\n` +
-      `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
+      異常掃描完成\n +
+      掃描合約：${symbols.length}\n +
+      符合第一關異常條件：${found.length}\n +
+      通過硬性條件：${anomalyState.rows.filter(x => x.hardPass).length}\n +
+      A+ 菁英候選：${anomalyState.rows.filter(x => x.tier === "A+ 菁英").length}\n +
+      A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n +
+      已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n +
+      K 線請求失敗：${errors.length}\n +
+      顯示評分 80 分以上：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 80).length} 筆（79 分以下不顯示；按振幅倍數 × 成交額倍數排序）\n +
+      注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。;
 
   } catch (error) {
     $("anomalyStatus").textContent = "異常掃描中止：" + String(error.message || error);
