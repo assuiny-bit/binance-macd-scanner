@@ -200,7 +200,7 @@ summary {
 <h1>幣安 MACD 背離掃描器</h1>
 
 <p>
-  日線有效背離｜4 小時同方向共振｜資金費率｜USDT 永續合約
+  日線有效背離｜資金費率｜USDT 永續合約
 </p>
 
 <div class="module-tabs" role="tablist" aria-label="掃描模組">
@@ -216,21 +216,21 @@ summary {
   <div id="status">尚未開始掃描。</div>
 
   <div class="note">
-    日線是主要篩選週期；只有日線存在有效背離時，才檢查 4 小時共振。4H 共振僅承認轉折點位於最近 6 根已收盤 4H K 線內的同方向背離，避免舊訊號誤判為目前共振。
+    MACD 背離掃描僅使用日線（1D）資料判斷頂背離與底背離。
     資金費率來自 Binance 公開行情 API。正資金費率通常代表多方支付空方，
     負資金費率則通常代表空方支付多方。
   </div>
 </div>
 
 <div class="panel">
-  <strong>目前有效日線背離｜共振優先排序</strong>
+  <strong>目前有效日線背離</strong>
 
   <div class="wrap">
     <table>
       <thead>
         <tr>
           <th>幣種</th>
-          <th>背離／4H 共振</th>
+          <th>MACD 背離</th>
           <th>資金費率</th>
           <th>下一次結算時間</th>
           <th class="results-detail">背離日期</th>
@@ -928,13 +928,12 @@ function renderSignals() {
   const body = $("results");
   body.replaceChildren();
 
-  /* 頂背離與底背離分組；同方向共振優先 */
+  /* 頂背離與底背離分組 */
   allSignals.sort((a, b) => {
     const directionA = a.signal.includes("頂") ? 0 : 1;
     const directionB = b.signal.includes("頂") ? 0 : 1;
 
     return directionA - directionB ||
-      (b.resonanceRank || 0) - (a.resonanceRank || 0) ||
       a.symbol.localeCompare(b.symbol) ||
       b.date2.localeCompare(a.date2);
   });
@@ -947,7 +946,7 @@ function renderSignals() {
     symbolCell.textContent = item.symbol;
     tr.appendChild(symbolCell);
 
-    /* 背離與共振標籤 */
+    /* 背離標籤 */
     const signalCell = document.createElement("td");
     signalCell.className = "signal-cell";
 
@@ -957,29 +956,6 @@ function renderSignals() {
     signalText.textContent = item.signal.replace("MACD", "");
 
     signalCell.appendChild(signalText);
-
-    const badge = document.createElement("span");
-    badge.className = "badge";
-
-    if (item.resonance === "4H 同方向共振") {
-      badge.classList.add("resonance-good");
-      badge.textContent = "4H 同方向共振";
-    } else if (item.resonance === "4H 方向不一致") {
-      badge.classList.add("resonance-mismatch");
-      badge.textContent = "4H 方向不一致";
-    } else if (item.resonance === "4H 資料失敗") {
-      badge.classList.add("resonance-error");
-      badge.textContent = "4H 資料失敗";
-    } else if (item.resonance === "4H 資料不足") {
-      badge.classList.add("resonance-error");
-      badge.textContent = "4H 資料不足";
-    } else {
-      badge.classList.add("resonance-none");
-      badge.textContent = "4H 未共振";
-    }
-
-    signalCell.appendChild(badge);
-    tr.appendChild(signalCell);
 
     /* 資金費率 */
     const funding = formatFunding(item.symbol);
@@ -1096,7 +1072,6 @@ $("exportSignals").addEventListener("click", () => {
     [
       "symbol",
       "daily_signal",
-      "4h_confirmation",
       "funding_rate_percent",
       "next_funding_time",
       "date1",
@@ -1115,7 +1090,6 @@ $("exportSignals").addEventListener("click", () => {
       return [
         item.symbol,
         item.signal,
-        item.resonance || "尚未確認",
         funding.text,
         formatNextTime(funding.nextTime),
         item.date1,
@@ -1229,61 +1203,8 @@ $("scan").addEventListener("click", async () => {
       const daily = await scanSymbol(symbol, "1d");
       allAudit.push(daily.audit);
 
-      if (daily.signals.length) {
-        /*
-         * 第二步：只有日線有有效背離，
-         * 才額外掃描 4 小時確認。
-         */
-        const fourHour = await scanSymbol(symbol, "4h");
-
-        for (const dailySignal of daily.signals) {
-          if (
-            fourHour.audit.status === "請求失敗"
-          ) {
-            dailySignal.resonance = "4H 資料失敗";
-            dailySignal.resonanceRank = -1;
-
-          } else if (
-            fourHour.audit.status === "資料不足"
-          ) {
-            dailySignal.resonance = "4H 資料不足";
-            dailySignal.resonanceRank = -1;
-
-          } else {
-            /*
-             * 共振只承認近期 4H 背離：轉折點必須落在最近 6 根已收盤 4H K 線內。
-             * 避免把 40 天掃描範圍內很久以前的背離誤標成「目前共振」。
-             * pivots 需要右側 2 根 K 線確認，因此最新可確認轉折點通常會落後最新 K 線 2 根。
-             */
-            const recent4hSignals = fourHour.signals.filter(
-              signal => Number.isInteger(signal.index2) &&
-                signal.index2 >= fourHour.audit.closedCandles - 7
-            );
-
-            const sameDirection = recent4hSignals.some(
-              signal => signal.signal === dailySignal.signal
-            );
-
-            const oppositeDirection = recent4hSignals.some(
-              signal => signal.signal !== dailySignal.signal
-            );
-
-            if (sameDirection) {
-              dailySignal.resonance = "4H 同方向共振";
-              dailySignal.resonanceRank = 2;
-
-            } else if (oppositeDirection) {
-              dailySignal.resonance = "4H 方向不一致";
-              dailySignal.resonanceRank = 0;
-
-            } else {
-              dailySignal.resonance = "4H 未共振";
-              dailySignal.resonanceRank = 1;
-            }
-          }
-
-          allSignals.push(dailySignal);
-        }
+      for (const dailySignal of daily.signals) {
+        allSignals.push(dailySignal);
       }
 
       if ((i + 1) % 5 === 0 || i === total - 1) {
@@ -1291,14 +1212,9 @@ $("scan").addEventListener("click", async () => {
         renderSignals();
       }
 
-      const resonanceCount = allSignals.filter(
-        item => item.resonance === "4H 同方向共振"
-      ).length;
-
       $("status").textContent =
         `掃描進度：${i + 1}/${total}` +
         `\n日線有效背離：${allSignals.length}` +
-        `\n4H 同方向共振：${resonanceCount}` +
         `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
 
       /* 稍微放慢請求速度 */
@@ -1308,19 +1224,9 @@ $("scan").addEventListener("click", async () => {
     renderSignals();
     renderAudit();
 
-    const resonanceCount = allSignals.filter(
-      item => item.resonance === "4H 同方向共振"
-    ).length;
-
-    const mismatchCount = allSignals.filter(
-      item => item.resonance === "4H 方向不一致"
-    ).length;
-
     $("status").textContent =
       `掃描完成` +
       `\n日線有效背離：${allSignals.length}` +
-      `\n4H 同方向共振：${resonanceCount}` +
-      `\n4H 方向不一致：${mismatchCount}` +
       `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
 
     $("exportSignals").disabled = false;
