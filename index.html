@@ -192,6 +192,18 @@ summary {
 .sort-header[aria-sort="ascending"] .sort-mark, .sort-header[aria-sort="descending"] .sort-mark { font-size:0; }
 .sort-header[aria-sort="ascending"] .sort-mark::after, .sort-header[aria-sort="descending"] .sort-mark::after { font-size:14px; }
 
+
+/* ===== 第三項：交易優勢評估系統（新增樣式，不覆蓋既有樣式）===== */
+.edge-summary { display:flex; flex-wrap:wrap; gap:10px; margin:10px 0; }
+.edge-chip { background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px; }
+.edge-table-wrap { overflow:auto; max-height:65vh; }
+#edgeResults td { vertical-align:top; }
+.edge-detail { white-space:normal; min-width:220px; max-width:360px; }
+.edge-alert { color:#fbbf24; font-weight:bold; }
+.edge-confirm { color:#34d399; font-weight:bold; }
+.edge-bear { color:#fb7185; font-weight:bold; }
+.edge-neutral { color:#9ca3af; }
+
 </style>
 </head>
 
@@ -206,6 +218,7 @@ summary {
 <div class="module-tabs" role="tablist" aria-label="掃描模組">
   <button type="button" class="module-tab active" id="tabMacd" aria-selected="true">MACD 背離掃描</button>
   <button type="button" class="module-tab" id="tabAnomaly" aria-selected="false">異常波動前兆掃描</button>
+  <button type="button" class="module-tab" id="tabEdge" aria-selected="false">交易優勢評估</button>
 </div>
 
 <section id="macdModule" class="module-panel"> 
@@ -296,6 +309,57 @@ summary {
   資金費率會隨市場變動；本程式只讀取公開資料，不會替你下單。
 </p>
 
+</section>
+
+
+<section id="edgeModule" class="module-panel" hidden>
+  <div class="panel">
+    <strong>交易優勢評估系統｜獨立全市場掃描</strong>
+    <p class="note">
+      先以 4H 市場結構找方向，再以 1H 結構／流動性事件辨識候選；候選再補查 15m、OI、資金費率與主動買賣比。
+      「提前觀察」與「條件確認」分開顯示。這是研究篩選，不是自動下單或獲利保證。
+    </p>
+    <label for="edgeMinVolume">24H 最低成交額</label>
+    <select id="edgeMinVolume">
+      <option value="5000000">500 萬 USDT</option>
+      <option value="10000000" selected>1,000 萬 USDT</option>
+      <option value="25000000">2,500 萬 USDT</option>
+    </select>
+    <button id="scanEdge">開始交易優勢掃描</button>
+    <button id="exportEdge" disabled>匯出第三項 CSV</button>
+    <div id="edgeStatus">尚未開始交易優勢掃描。</div>
+    <div class="note">
+      起始規則：4H 最近已確認波段高低點判斷結構；1H 掃過前高／前低並收回視為流動性掃蕩候選；突破已確認波段點視為 BOS／CHOCH 候選。
+      15m 用於觀察成交量及收盤方向。所有訊號只使用當時已收盤 K 線；右側 2 根 K 線確認轉折，因此會有確認延遲。
+    </div>
+  </div>
+  <div class="panel">
+    <strong>交易優勢候選名單</strong>
+    <div class="edge-summary" id="edgeSummary"></div>
+    <div class="edge-table-wrap">
+      <table>
+        <thead><tr>
+          <th>幣種</th><th>階段／方向</th><th>4H 結構</th><th>1H 事件</th>
+          <th>15m 觀察</th><th>OI 變化</th><th>歷史資金費率</th>
+          <th>主動買賣比</th><th>24H 成交額</th><th>判斷依據／限制</th>
+        </tr></thead>
+        <tbody id="edgeResults"></tbody>
+      </table>
+    </div>
+  </div>
+  <details class="panel">
+    <summary><strong>第三項資料來源與判斷限制（點擊展開）</strong></summary>
+    <ul class="note">
+      <li>合約清單、24H 成交額：Binance USDⓈ-M Futures 公開 REST API：/fapi/v1/exchangeInfo、/fapi/v1/ticker/24hr。</li>
+      <li>K 線：Binance USDⓈ-M Futures /fapi/v1/klines（4H、1H、15m）。</li>
+      <li>OI：Binance Futures Data /futures/data/openInterestHist（5m）；只比較事件前可取得的歷史端點。</li>
+      <li>資金費率：Binance /fapi/v1/fundingRate；顯示事件時間之前最近一次已結算值。</li>
+      <li>主動買賣比：Binance Futures Data /futures/data/takerlongshortRatio（5m）。它是公開統計比值，不是逐筆訂單流 Delta。</li>
+      <li>本版本不抓清算資料、不推測巨鯨身份，也不宣稱能看到真實機構訂單。訂單簿深度未納入本版判斷。</li>
+      <li>OI 上升不等於多方單方面增加；每筆合約都有多空雙方，需與價格及主動買賣比一起看。</li>
+      <li>結構與掃蕩規則是第一版可測試規則，尚未經回測證明具有正期望值。請勿直接視為買賣建議。</li>
+    </ul>
+  </details>
 </section>
 
 <section id="anomalyModule" class="module-panel" hidden>
@@ -1689,6 +1753,195 @@ $("scanAnomaly").addEventListener("click", async () => {
     anomalyState.running = false;
     $("scanAnomaly").disabled = false;
   }
+});
+
+
+/* =====================================================================
+   第三項：交易優勢評估系統
+   以下為新增程式；不修改原 MACD 與異常波動模組的既有函式及判斷。
+===================================================================== */
+const edgeState = { running:false, rows:[] };
+
+function setEdgeModule(name) {
+  const macd = name === "macd";
+  const anomaly = name === "anomaly";
+  $("macdModule").hidden = !macd;
+  $("anomalyModule").hidden = !anomaly;
+  $("edgeModule").hidden = name !== "edge";
+  $("tabMacd").classList.toggle("active", macd);
+  $("tabAnomaly").classList.toggle("active", anomaly);
+  $("tabEdge").classList.toggle("active", name === "edge");
+  $("tabMacd").setAttribute("aria-selected", String(macd));
+  $("tabAnomaly").setAttribute("aria-selected", String(anomaly));
+  $("tabEdge").setAttribute("aria-selected", String(name === "edge"));
+}
+$("tabMacd").addEventListener("click", () => setEdgeModule("macd"));
+$("tabAnomaly").addEventListener("click", () => setEdgeModule("anomaly"));
+$("tabEdge").addEventListener("click", () => setEdgeModule("edge"));
+
+function edgePivots(values, kind, left=2, right=2) {
+  const out = [];
+  for (let i=left; i<values.length-right; i++) {
+    const v=values[i];
+    if (!Number.isFinite(v)) continue;
+    const w=values.slice(i-left,i+right+1);
+    if (kind==="high" ? v===Math.max(...w) : v===Math.min(...w)) {
+      if (w.filter(x=>x===v).length===1) out.push(i);
+    }
+  }
+  return out;
+}
+
+function edgeReadCandles(raw) {
+  const now=Date.now();
+  return (Array.isArray(raw)?raw:[]).filter(c=>Number(c[6])<now).map(c=>({
+    time:Number(c[0]), open:Number(c[1]), high:Number(c[2]), low:Number(c[3]),
+    close:Number(c[4]), volume:Number(c[5]), quoteVolume:Number(c[7]),
+    trades:Number(c[8]), takerBuyBase:Number(c[9]), takerBuyQuote:Number(c[10])
+  })).filter(c=>[c.time,c.open,c.high,c.low,c.close,c.quoteVolume].every(Number.isFinite));
+}
+
+function edgeStructure(candles) {
+  if (candles.length<30) return {label:"資料不足",direction:"neutral",reason:"4H K 線不足"};
+  const highs=candles.map(c=>c.high), lows=candles.map(c=>c.low);
+  const hp=edgePivots(highs,"high"), lp=edgePivots(lows,"low");
+  if (hp.length<2 || lp.length<2) return {label:"波段不足",direction:"neutral",reason:"尚無兩組已確認高低點"};
+  const h1=hp[hp.length-2], h2=hp[hp.length-1], l1=lp[lp.length-2], l2=lp[lp.length-1];
+  const higherHigh=highs[h2]>highs[h1], higherLow=lows[l2]>lows[l1];
+  const lowerHigh=highs[h2]<highs[h1], lowerLow=lows[l2]<lows[l1];
+  const last=candles[candles.length-1].close;
+  const priorHigh=highs[hp[hp.length-1]], priorLow=lows[lp[lp.length-1]];
+  let direction="neutral", label="區間／未確認";
+  if (higherHigh && higherLow) {direction="bull";label="多方結構 HH／HL";}
+  else if (lowerHigh && lowerLow) {direction="bear";label="空方結構 LH／LL";}
+  const brokeHigh=last>priorHigh, brokeLow=last<priorLow;
+  if (brokeHigh) {label=direction==="bear"?"多方 CHOCH 候選":"多方 BOS 候選";direction="bull";}
+  if (brokeLow) {label=direction==="bull"?"空方 CHOCH 候選":"空方 BOS 候選";direction="bear";}
+  return {label,direction,reason:`最近已確認波段高點 ${priorHigh}；低點 ${priorLow}`,priorHigh,priorLow};
+}
+
+function edgeLiquidityEvent(candles) {
+  if (candles.length<25) return {label:"資料不足",direction:"neutral",reason:"1H K 線不足"};
+  const c=candles[candles.length-1], prior=candles.slice(-21,-1);
+  const previousHigh=Math.max(...prior.map(x=>x.high));
+  const previousLow=Math.min(...prior.map(x=>x.low));
+  if (c.low<previousLow && c.close>previousLow) return {label:"低點掃蕩後收回",direction:"bull",reason:`刺穿前 20 根低點 ${previousLow} 後收盤收回`};
+  if (c.high>previousHigh && c.close<previousHigh) return {label:"高點掃蕩後收回",direction:"bear",reason:`刺穿前 20 根高點 ${previousHigh} 後收盤跌回`};
+  if (c.close>previousHigh) return {label:"向上突破候選",direction:"bull",reason:"1H 收盤高於前 20 根高點"};
+  if (c.close<previousLow) return {label:"向下跌破候選",direction:"bear",reason:"1H 收盤低於前 20 根低點"};
+  return {label:"尚無明確事件",direction:"neutral",reason:"未掃過或收盤突破前 20 根區間"};
+}
+
+function edge15mObservation(candles) {
+  if (candles.length<22) return "15m 資料不足";
+  const last=candles[candles.length-1], base=candles.slice(-21,-1);
+  const med=median(base.map(x=>x.quoteVolume));
+  const ratio=med>0?last.quoteVolume/med:NaN;
+  const takerBuy=last.takerBuyQuote;
+  const takerSell=last.quoteVolume-takerBuy;
+  const buyRatio=takerSell>0?takerBuy/takerSell:NaN;
+  return `成交額 ${formatRatio(ratio)}；主動買／賣 ${formatRatio(buyRatio)}；${last.close>=last.open?"收紅":"收黑"}`;
+}
+
+async function edgeEnrich(item) {
+  const symbol=encodeURIComponent(item.symbol), t=item.eventTime;
+  const start=t-60*60*1000, fundingStart=t-7*24*60*60*1000;
+  const tasks=await Promise.allSettled([
+    getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${start}&endTime=${t}&limit=12`),
+    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${fundingStart}&endTime=${t}&limit=100`),
+    getJSON(`${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${start}&endTime=${t}&limit=12`)
+  ]);
+  item.oiText="無資料"; item.fundingText="無資料"; item.takerText="無資料";
+  const oi=tasks[0];
+  if(oi.status==="fulfilled" && Array.isArray(oi.value) && oi.value.length>=2){
+    const a=Number(oi.value[0].sumOpenInterest), b=Number(oi.value[oi.value.length-1].sumOpenInterest);
+    if(a>0 && Number.isFinite(b)) item.oiText=formatPct((b/a-1)*100);
+  }
+  const fr=tasks[1];
+  if(fr.status==="fulfilled" && Array.isArray(fr.value) && fr.value.length){
+    const x=fr.value[fr.value.length-1];
+    item.fundingText=`${formatPct(Number(x.fundingRate)*100,4)}（${formatLocalTime(Number(x.fundingTime))}）`;
+  }
+  const tk=tasks[2];
+  if(tk.status==="fulfilled" && Array.isArray(tk.value) && tk.value.length){
+    const x=tk.value[tk.value.length-1];
+    item.takerText=formatRatio(Number(x.buySellRatio));
+  }
+  return item;
+}
+
+function renderEdgeRows() {
+  const body=$("edgeResults"); body.replaceChildren();
+  const rows=[...edgeState.rows].sort((a,b)=>b.rank-a.rank);
+  const counts={early:rows.filter(x=>x.stage==="提前觀察").length, confirmed:rows.filter(x=>x.stage==="條件確認").length};
+  $("edgeSummary").textContent="";
+  for(const [label,value] of [["候選數",rows.length],["提前觀察",counts.early],["條件確認",counts.confirmed]]){
+    const div=document.createElement("div");div.className="edge-chip";div.textContent=`${label}：${value}`;$("edgeSummary").appendChild(div);
+  }
+  for(const x of rows){
+    const tr=document.createElement("tr");
+    const dir=x.direction==="bull"?"多方":x.direction==="bear"?"空方":"中性";
+    const cells=[
+      x.symbol,`${x.stage}／${dir}`,x.structure,x.event,x.m15,x.oiText,x.fundingText,x.takerText,
+      Number.isFinite(x.quoteVolume24h)?`${(x.quoteVolume24h/1e6).toFixed(2)}M USDT`:"無資料",
+      `${x.reason}；${x.dataNote||"歷史補充資料以事件時間為界"}`
+    ];
+    cells.forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===1)td.className=x.stage==="條件確認"?"edge-confirm":x.direction==="bear"?"edge-bear":x.direction==="bull"?"edge-alert":"edge-neutral";if(i===9)td.className="edge-detail";tr.appendChild(td);});
+    body.appendChild(tr);
+  }
+}
+
+$("exportEdge").addEventListener("click",()=>{
+  downloadCSV("binance_trading_edge_scanner.csv",
+    ["symbol","stage","direction","4h_structure","1h_event","15m_observation","oi_change","historical_funding","taker_buy_sell_ratio","quote_volume_24h","reason"],
+    edgeState.rows.map(x=>[x.symbol,x.stage,x.direction,x.structure,x.event,x.m15,x.oiText,x.fundingText,x.takerText,x.quoteVolume24h,x.reason]));
+});
+
+$("scanEdge").addEventListener("click",async()=>{
+  if(edgeState.running)return;
+  edgeState.running=true;$("scanEdge").disabled=true;$("exportEdge").disabled=true;
+  $("edgeResults").replaceChildren();$("edgeSummary").replaceChildren();edgeState.rows=[];
+  const minVolume=Number($("edgeMinVolume").value);
+  try{
+    $("edgeStatus").textContent="取得 Binance USDT 永續合約清單與 24H 成交額……";
+    const [info,tickers]=await Promise.all([getJSON(API+"/fapi/v1/exchangeInfo"),getJSON(API+"/fapi/v1/ticker/24hr")]);
+    if(!Array.isArray(info.symbols)||!Array.isArray(tickers))throw new Error("Binance 回傳格式不正確");
+    const volumes=new Map(tickers.map(x=>[x.symbol,Number(x.quoteVolume)]));
+    const symbols=info.symbols.filter(x=>x.status==="TRADING"&&x.contractType==="PERPETUAL"&&x.quoteAsset==="USDT"&&(volumes.get(x.symbol)||0)>=minVolume).map(x=>x.symbol);
+    let done=0;const candidates=[],errors=[];
+    $("edgeStatus").textContent=`第一階段：掃描 ${symbols.length} 個符合成交額門檻的 USDT 永續合約（4H＋1H）……`;
+    await mapWithConcurrency(symbols,5,async symbol=>{
+      try{
+        const [raw4h,raw1h]=await Promise.all([
+          getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=4h&limit=100`),
+          getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=100`)
+        ]);
+        const c4=edgeReadCandles(raw4h),c1=edgeReadCandles(raw1h);
+        const st=edgeStructure(c4),ev=edgeLiquidityEvent(c1);
+        if(st.direction!=="neutral"||ev.direction!=="neutral"){
+          const direction=ev.direction!=="neutral"?ev.direction:st.direction;
+          const aligned=st.direction===direction&&ev.direction===direction;
+          candidates.push({symbol,direction,structure:st.label,event:ev.label,reason:`${st.reason}；${ev.reason}`,eventTime:c1.length?c1[c1.length-1].time:Date.now(),quoteVolume24h:volumes.get(symbol),stage:aligned?"條件確認":"提前觀察",rank:(aligned?2:1)+(ev.direction!=="neutral"?1:0),dataNote:""});
+        }
+      }catch(e){errors.push(`${symbol}: ${e.message||e}`);}
+      finally{done++;if(done%30===0||done===symbols.length)$("edgeStatus").textContent=`第一階段：${done}/${symbols.length}\n結構／事件候選：${candidates.length}\n請求錯誤：${errors.length}`;}
+    });
+    candidates.sort((a,b)=>b.rank-a.rank);
+    const shortlist=candidates.slice(0,60);
+    $("edgeStatus").textContent=`第二階段：${shortlist.length} 個候選補查 15m、OI、資金費率與主動買賣比……`;
+    await mapWithConcurrency(shortlist,3,async item=>{
+      const sym=encodeURIComponent(item.symbol);
+      try{
+        const [raw15]=await Promise.all([getJSON(`${API}/fapi/v1/klines?symbol=${sym}&interval=15m&limit=30`)]);
+        item.m15=edge15mObservation(edgeReadCandles(raw15));
+        await edgeEnrich(item);
+      }catch(e){item.m15=item.m15||"補查失敗";item.dataNote=String(e.message||e);}
+    });
+    edgeState.rows=shortlist;renderEdgeRows();
+    $("exportEdge").disabled=!shortlist.length;
+    $("edgeStatus").textContent=`交易優勢掃描完成\n符合成交額門檻合約：${symbols.length}\n結構／事件候選：${candidates.length}\n顯示候選：${shortlist.length}\n請求錯誤：${errors.length}\n注意：候選規則尚未經回測驗證，不代表已證明有交易優勢。`;
+  }catch(e){$("edgeStatus").textContent="第三項掃描中止："+String(e.message||e);}
+  finally{edgeState.running=false;$("scanEdge").disabled=false;}
 });
 
 </script>
