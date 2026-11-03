@@ -339,9 +339,16 @@ summary {
     <div class="edge-table-wrap">
       <table>
         <thead><tr>
-          <th>幣種</th><th>階段／方向</th><th>4H 結構</th><th>1H 事件</th>
-          <th>15m 觀察</th><th>OI 變化</th><th>歷史資金費率</th>
-          <th>主動買賣比</th><th>24H 成交額</th><th>判斷依據／限制</th>
+          <th><button type="button" class="sort-header" data-edge-sort="symbol">幣種 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="stage">階段／方向 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="structure">4H 結構 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="event">1H 事件 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="m15">15m 觀察 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="oiChange">OI 變化 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="fundingRate">歷史資金費率 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="takerRatio">主動買賣比 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="quoteVolume24h">24H 成交額 <span class="sort-mark">↕</span></button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="reason">判斷依據／限制 <span class="sort-mark">↕</span></button></th>
         </tr></thead>
         <tbody id="edgeResults"></tbody>
       </table>
@@ -1760,7 +1767,7 @@ $("scanAnomaly").addEventListener("click", async () => {
    第三項：交易優勢評估系統
    以下為新增程式；不修改原 MACD 與異常波動模組的既有函式及判斷。
 ===================================================================== */
-const edgeState = { running:false, rows:[] };
+const edgeState = { running:false, rows:[], sortKey:null, sortDirection:"desc" };
 
 function setEdgeModule(name) {
   const macd = name === "macd";
@@ -1872,7 +1879,26 @@ async function edgeEnrich(item) {
 
 function renderEdgeRows() {
   const body=$("edgeResults"); body.replaceChildren();
-  const rows=[...edgeState.rows].sort((a,b)=>b.rank-a.rank);
+  const sortValue = (item, key) => {
+    if (key === "stage") return `${item.stage||""}／${item.direction||""}`;
+    if (key === "reason") return `${item.reason||""}；${item.dataNote||""}`;
+    return item[key];
+  };
+  const rows=[...edgeState.rows].sort((a,b)=>{
+    if (!edgeState.sortKey) return b.rank-a.rank;
+    const av=sortValue(a,edgeState.sortKey), bv=sortValue(b,edgeState.sortKey);
+    const aMissing=av===null||av===undefined||av===""||!Number.isFinite(av)&&typeof av==="number";
+    const bMissing=bv===null||bv===undefined||bv===""||!Number.isFinite(bv)&&typeof bv==="number";
+    if(aMissing||bMissing) return aMissing===bMissing?0:(aMissing?1:-1);
+    let result;
+    if(typeof av==="number"&&typeof bv==="number") result=av-bv;
+    else result=String(av).localeCompare(String(bv),"zh-TW",{numeric:true,sensitivity:"base"});
+    return edgeState.sortDirection==="asc"?result:-result;
+  });
+  document.querySelectorAll("[data-edge-sort]").forEach(button=>{
+    const active=button.dataset.edgeSort===edgeState.sortKey;
+    button.setAttribute("aria-sort",active?(edgeState.sortDirection==="asc"?"ascending":"descending"):"none");
+  });
   const counts={early:rows.filter(x=>x.stage==="提前觀察").length, confirmed:rows.filter(x=>x.stage==="條件確認").length};
   $("edgeSummary").textContent="";
   for(const [label,value] of [["候選數",rows.length],["提前觀察",counts.early],["條件確認",counts.confirmed]]){
@@ -1891,6 +1917,15 @@ function renderEdgeRows() {
   }
 }
 
+document.querySelectorAll("[data-edge-sort]").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const key=button.dataset.edgeSort;
+    if(edgeState.sortKey===key) edgeState.sortDirection=edgeState.sortDirection==="asc"?"desc":"asc";
+    else { edgeState.sortKey=key; edgeState.sortDirection="asc"; }
+    renderEdgeRows();
+  });
+});
+
 $("exportEdge").addEventListener("click",()=>{
   downloadCSV("binance_trading_edge_scanner.csv",
     ["symbol","stage","direction","4h_structure","1h_event","15m_observation","oi_change","historical_funding","taker_buy_sell_ratio","quote_volume_24h","reason"],
@@ -1900,7 +1935,7 @@ $("exportEdge").addEventListener("click",()=>{
 $("scanEdge").addEventListener("click",async()=>{
   if(edgeState.running)return;
   edgeState.running=true;$("scanEdge").disabled=true;$("exportEdge").disabled=true;
-  $("edgeResults").replaceChildren();$("edgeSummary").replaceChildren();edgeState.rows=[];
+  $("edgeResults").replaceChildren();$("edgeSummary").replaceChildren();edgeState.rows=[];edgeState.sortKey=null;edgeState.sortDirection="desc";
   const minVolume=Number($("edgeMinVolume").value);
   try{
     $("edgeStatus").textContent="取得 Binance USDT 永續合約清單與 24H 成交額……";
