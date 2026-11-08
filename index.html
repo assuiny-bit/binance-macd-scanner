@@ -354,6 +354,7 @@ summary {
           <th><button type="button" class="sort-header" data-edge-sort="takerRatio">主動買賣比 ↕</button></th>
           <th><button type="button" class="sort-header" data-edge-sort="quoteVolume24h">24H 成交額 ↕</button></th>
           <th><button type="button" class="sort-header" data-edge-sort="reason">判斷依據／限制
+
  ↕</button></th>
         </tr></thead>
         <tbody id="edgeResults"></tbody>
@@ -705,6 +706,8 @@ function findSignals(
   function scanZeroAxis(from, to) {
     for (
       let i = Math.max(0, from);
+
+ 
 
       i <= to && i < dea.length;
       i++
@@ -1127,6 +1130,7 @@ function renderAudit() {
 
     values.forEach((value, index) => {
       const
+
  td = document.createElement("td");
       td.textContent = value;
 
@@ -1473,7 +1477,8 @@ async function enrichAnomalyCandidate(item, liquidity = {}) {
   const eventTime = Number(item.eventTime);
   const oneHourBefore = eventTime - 60 * 60 * 1000;
   const sevenDaysBefore = eventTime - 7 * 24 * 60 * 60 * 1000;
- 
+  
+
  const tasks = await Promise.allSettled([
     getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`),
     getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100`),
@@ -1684,6 +1689,7 @@ $("scanAnomaly").addEventListener("click", async () => {
     const bookTicker = await getJSON(`${API}/fapi/v1/ticker/bookTicker`);
     const liquidityMap = new Map();
     const
+
  bookMap = new Map();
     if (Array.isArray(ticker24h)) for (const t of ticker24h) liquidityMap.set(t.symbol, Number(t.quoteVolume));
     if (Array.isArray(bookTicker)) for (const b of bookTicker) { const bid=Number(b.bidPrice), ask=Number(b.askPrice), mid=(bid+ask)/2; bookMap.set(b.symbol, mid>0 ? (ask-bid)/mid*100 : NaN); }
@@ -1886,6 +1892,8 @@ async function edgeEnrich(item) {
       else if(item.oiChange<0 && pc<0) item.oiActivity="價格下跌＋未平倉量減少：可能有部位平倉";
       else item.oiActivity="OI 有變化；價格方向不明";
 
+ 
+
     }
   }
   const fr=tasks[1];
@@ -2023,6 +2031,546 @@ $("scanEdge").addEventListener("click",async()=>{
   }catch(e){$("edgeStatus").textContent="第三項掃描中止："+String(e.message||e);}
   finally{edgeState.running=false;$("scanEdge").disabled=false;}
 });
+
+</script>
+<script>
+/* ===== 第四項：BingX 歷史資料研究系統（獨立新增；不改動前三項）===== */
+(function () {
+  "use strict";
+
+  const BINGX_HIST = {
+    baseUrl: "https://open-api.bingx.com",
+    contractPath: "/openApi/swap/v2/quote/contracts",
+    klinePath: "/openApi/swap/v3/quote/klines",
+    symbols: ["CLAUDIA-USDT", "JCT-USDT", "FLOAT-USDT"],
+    intervals: ["1d", "4h", "1h", "30m", "15m"],
+    intervalMs: {
+      "1d": 86400000,
+      "4h": 14400000,
+      "1h": 3600000,
+      "30m": 1800000,
+      "15m": 900000
+    },
+    limit: 1440,
+    requestGapMs: 1100,
+    dbName: "bingx_history_research_v1",
+    dbVersion: 1,
+    storeName: "candles"
+  };
+
+  const bingxHistState = {
+    db: null,
+    running: false,
+    stopRequested: false,
+    rows: new Map(),
+    status: "尚未開始。"
+  };
+
+  const bingxHistPairs = BINGX_HIST.symbols.flatMap(symbol =>
+    BINGX_HIST.intervals.map(interval => ({
+      symbol,
+      interval,
+      key: `${symbol}|${interval}`
+    }))
+  );
+
+  function bingxHistAddStyle() {
+    const style = document.createElement("style");
+    style.textContent = `
+      #bingxHistoryModule .bingx-history-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      #bingxHistoryModule .bingx-history-table-wrap { overflow:auto; max-height:60vh; }
+      #bingxHistoryModule table { min-width:900px; }
+      #bingxHistoryModule td { white-space:nowrap; }
+      #bingxHistoryModule .bingx-history-good { color:#34d399; }
+      #bingxHistoryModule .bingx-history-warn { color:#fbbf24; }
+      #bingxHistoryModule .bingx-history-error { color:#fb7185; }
+      #bingxHistoryModule .bingx-history-status { white-space:pre-wrap; line-height:1.8; overflow-wrap:anywhere; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function bingxHistBuildModule() {
+    const tabs = document.querySelector(".module-tabs");
+    const main = document.querySelector("main");
+    if (!tabs || !main) throw new Error("找不到原本的模組分頁或 main 容器，已停止新增。 ");
+
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "module-tab";
+    tab.id = "tabBingxHistory";
+    tab.setAttribute("aria-selected", "false");
+    tab.textContent = "BingX 歷史資料研究";
+    tabs.appendChild(tab);
+
+    const section = document.createElement("section");
+    section.id = "bingxHistoryModule";
+    section.className = "module-panel";
+    section.hidden = true;
+    section.innerHTML = `
+      <div class="panel">
+        <strong>第四項：BingX 歷史資料研究系統</strong>
+        <p class="note">
+          下載指定合約自 BingX 合約上架時間起的歷史 K 線，涵蓋 1D、4H、1H、30M、15M。
+          僅保存已收盤 K 線；資料存放在目前瀏覽器的 IndexedDB，不會覆蓋前三項的資料或設定。
+        </p>
+        <div class="bingx-history-controls">
+          <button type="button" id="bingxHistoryStart">開始下載／補齊歷史資料</button>
+          <button type="button" id="bingxHistoryStop" disabled>停止後續下載</button>
+          <button type="button" id="bingxHistoryExport" disabled>匯出全部 K 線 CSV</button>
+          <button type="button" id="bingxHistoryRefresh">重新檢查資料</button>
+        </div>
+        <div id="bingxHistoryStatus" class="bingx-history-status">正在初始化本機資料庫……</div>
+        <p class="note">
+          下載會依序逐頁進行，單頁最多 1,440 根；每次請求至少間隔 1.1 秒。再次執行時會檢查歷史區間缺口及最新資料，嘗試補齊缺少的區段。
+          若 BingX API 或瀏覽器跨網域政策拒絕請求，狀態會顯示錯誤，不會假裝下載成功。
+        </p>
+      </div>
+      <div class="panel">
+        <strong>三個研究幣種 × 五個週期</strong>
+        <div class="bingx-history-table-wrap">
+          <table>
+            <thead><tr>
+              <th>合約</th><th>週期</th><th>最早 K 線</th><th>最新已收盤 K 線</th>
+              <th>已存筆數</th><th>缺口估算</th><th>本次新增</th><th>狀態</th>
+            </tr></thead>
+            <tbody id="bingxHistoryResults"></tbody>
+          </table>
+        </div>
+      </div>
+      <details class="panel">
+        <summary><strong>資料欄位與限制（點擊展開）</strong></summary>
+        <ul class="note">
+          <li>來源：BingX USDT 永續合約公開行情 API；合約資訊用來讀取 launchTime，K 線使用 /openApi/swap/v3/quote/klines。</li>
+          <li>保存欄位：開盤時間、開盤價、最高價、最低價、收盤價、基礎成交量、收盤時間、USDT 成交額、成交筆數、主動買入基礎量、主動買入 USDT 成交額。</li>
+          <li>缺口估算是依時間間隔推算；沒有成交的時間段、交易所未提供的 K 線或合約停牌時段，也可能呈現為缺口，不能直接視為資料遺失。</li>
+          <li>資料儲存在此瀏覽器／此網站來源的 IndexedDB。清除瀏覽器網站資料可能刪除本機資料，請定期匯出 CSV 備份。</li>
+          <li>本項目前只下載 K 線，不代表已取得歷史 OI、歷史資金費率或清算資料；不得把即時 OI 誤當成歷史 OI。</li>
+        </ul>
+      </details>
+    `;
+    main.appendChild(section);
+
+    function showBingxHistory() {
+      document.getElementById("macdModule").hidden = true;
+      document.getElementById("anomalyModule").hidden = true;
+      document.getElementById("edgeModule").hidden = true;
+      section.hidden = false;
+      document.querySelectorAll(".module-tabs .module-tab").forEach(item => {
+        const active = item === tab;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-selected", String(active));
+      });
+    }
+
+    tab.addEventListener("click", showBingxHistory);
+    ["tabMacd", "tabAnomaly", "tabEdge"].forEach(id => {
+      const oldTab = document.getElementById(id);
+      if (oldTab) oldTab.addEventListener("click", () => {
+        section.hidden = true;
+        tab.classList.remove("active");
+        tab.setAttribute("aria-selected", "false");
+      });
+    });
+
+    return section;
+  }
+
+  function bingxHistOpenDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(BINGX_HIST.dbName, BINGX_HIST.dbVersion);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(BINGX_HIST.storeName)) {
+          const store = db.createObjectStore(BINGX_HIST.storeName, { keyPath: "id" });
+          store.createIndex("pairKey", "pairKey", { unique: false });
+          store.createIndex("openTime", "openTime", { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("IndexedDB 開啟失敗"));
+    });
+  }
+
+  function bingxHistGetAllForPair(pairKey) {
+    return new Promise((resolve, reject) => {
+      const tx = bingxHistState.db.transaction(BINGX_HIST.storeName, "readonly");
+      const index = tx.objectStore(BINGX_HIST.storeName).index("pairKey");
+      const request = index.getAll(IDBKeyRange.only(pairKey));
+      request.onsuccess = () => resolve((request.result || []).sort((a, b) => a.openTime - b.openTime));
+      request.onerror = () => reject(request.error || new Error("讀取本機 K 線失敗"));
+    });
+  }
+
+  function bingxHistGetAll() {
+    return new Promise((resolve, reject) => {
+      const tx = bingxHistState.db.transaction(BINGX_HIST.storeName, "readonly");
+      const request = tx.objectStore(BINGX_HIST.storeName).getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error || new Error("讀取全部 K 線失敗"));
+    });
+  }
+
+  function bingxHistSaveBatch(records) {
+    if (!records.length) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const tx = bingxHistState.db.transaction(BINGX_HIST.storeName, "readwrite");
+      const store = tx.objectStore(BINGX_HIST.storeName);
+      records.forEach(record => store.put(record));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("寫入 IndexedDB 失敗"));
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB 寫入中止"));
+    });
+  }
+
+  async function bingxHistFetchJson(url) {
+    const response = await fetch(url, { method: "GET", cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const json = await response.json();
+    if (json && json.code !== undefined && Number(json.code) !== 0) {
+      throw new Error(`BingX API ${json.code}：${json.msg || "未提供錯誤訊息"}`);
+    }
+    return json;
+  }
+
+  async function bingxHistGetContracts() {
+    const json = await bingxHistFetchJson(BINGX_HIST.baseUrl + BINGX_HIST.contractPath);
+    if (!json || !Array.isArray(json.data)) {
+      throw new Error("合約清單回傳格式不正確，預期 data 為陣列");
+    }
+    return json.data;
+  }
+
+  function bingxHistNormalizeCandle(symbol, interval, raw) {
+    if (!Array.isArray(raw) || raw.length < 7) return null;
+    const values = raw.slice(0, 11).map((value, index) => index === 8 ? Number(value) : value);
+    const openTime = Number(values[0]);
+    const closeTime = Number(values[6]);
+    const numericFields = [1, 2, 3, 4, 5, 7, 8, 9, 10];
+    if (!Number.isFinite(openTime) || !Number.isFinite(closeTime)) return null;
+    if (numericFields.some(index => values[index] !== undefined && !Number.isFinite(Number(values[index])))) return null;
+    return {
+      id: `${symbol}|${interval}|${openTime}`,
+      pairKey: `${symbol}|${interval}`,
+      symbol,
+      interval,
+      openTime,
+      open: Number(values[1]),
+      high: Number(values[2]),
+      low: Number(values[3]),
+      close: Number(values[4]),
+      volume: Number(values[5]),
+      closeTime,
+      quoteVolume: values[7] === undefined ? null : Number(values[7]),
+      trades: values[8] === undefined ? null : Number(values[8]),
+      takerBuyBaseVolume: values[9] === undefined ? null : Number(values[9]),
+      takerBuyQuoteVolume: values[10] === undefined ? null : Number(values[10]),
+      source: "BingX",
+      updatedAt: Date.now()
+    };
+  }
+
+  function bingxHistBuildRanges(existing, launchTime, intervalMs, now) {
+    const ranges = [];
+    if (!existing.length) return [{ start: launchTime, end: now }];
+
+    const sorted = [...existing].sort((a, b) => a.openTime - b.openTime);
+    const first = sorted[0].openTime;
+    const last = sorted[sorted.length - 1].openTime;
+
+    if (first > launchTime + intervalMs) {
+      ranges.push({ start: launchTime, end: first - 1 });
+    }
+
+    for (let i = 1; i < sorted.length; i++) {
+      const previous = sorted[i - 1].openTime;
+      const current = sorted[i].openTime;
+      if (current - previous > intervalMs * 1.5) {
+        ranges.push({ start: previous + intervalMs, end: current - 1 });
+      }
+    }
+
+    if (last + intervalMs <= now) {
+      ranges.push({ start: last + intervalMs, end: now });
+    }
+    return ranges;
+  }
+
+  async function bingxHistDownloadRange(pair, range, onPage) {
+    const intervalMs = BINGX_HIST.intervalMs[pair.interval];
+    let cursor = Math.max(0, Math.floor(range.start));
+    const end = Math.floor(range.end);
+    let inserted = 0;
+
+    while (cursor <= end && !bingxHistState.stopRequested) {
+      const params = new URLSearchParams({
+        symbol: pair.symbol,
+        interval: pair.interval,
+        startTime: String(cursor),
+        endTime: String(end),
+        limit: String(BINGX_HIST.limit)
+      });
+      const url = `${BINGX_HIST.baseUrl}${BINGX_HIST.klinePath}?${params.toString()}`;
+      const json = await bingxHistFetchJson(url);
+      if (!json || !Array.isArray(json.data)) {
+        throw new Error("K 線回傳格式不正確，預期 data 為陣列");
+      }
+
+      const now = Date.now();
+      const candles = json.data
+        .map(raw => bingxHistNormalizeCandle(pair.symbol, pair.interval, raw))
+        .filter(c => c && c.openTime >= cursor && c.openTime <= end && c.closeTime < now)
+        .sort((a, b) => a.openTime - b.openTime);
+
+      if (!candles.length) break;
+      await bingxHistSaveBatch(candles);
+      inserted += candles.length;
+      const lastOpen = candles[candles.length - 1].openTime;
+      if (lastOpen < cursor || lastOpen + intervalMs <= cursor) {
+        throw new Error("分頁游標沒有向前推進，為避免重複請求已停止此區段");
+      }
+      cursor = lastOpen + intervalMs;
+      if (onPage) onPage(candles.length, inserted);
+      if (candles.length < BINGX_HIST.limit) break;
+      await new Promise(resolve => setTimeout(resolve, BINGX_HIST.requestGapMs));
+    }
+    return inserted;
+  }
+
+  function bingxHistGapCount(records, intervalMs) {
+    if (records.length < 2) return 0;
+    let missing = 0;
+    for (let i = 1; i < records.length; i++) {
+      const delta = records[i].openTime - records[i - 1].openTime;
+      if (delta > intervalMs * 1.5) {
+        missing += Math.max(0, Math.round(delta / intervalMs) - 1);
+      }
+    }
+    return missing;
+  }
+
+  function bingxHistFormatTime(timestamp) {
+    if (!Number.isFinite(timestamp)) return "—";
+    return new Date(timestamp).toLocaleString("zh-TW", {
+      timeZone: "Asia/Taipei",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false
+    });
+  }
+
+  function bingxHistSetStatus(message, className = "") {
+    const node = document.getElementById("bingxHistoryStatus");
+    if (!node) return;
+    node.textContent = message;
+    node.className = `bingx-history-status ${className}`.trim();
+    bingxHistState.status = message;
+  }
+
+  function bingxHistRenderRows() {
+    const body = document.getElementById("bingxHistoryResults");
+    if (!body) return;
+    body.replaceChildren();
+    for (const pair of bingxHistPairs) {
+      const row = bingxHistState.rows.get(pair.key) || {
+        symbol: pair.symbol, interval: pair.interval,
+        first: null, last: null, count: 0, gaps: 0,
+        added: 0, status: "等待檢查", statusClass: ""
+      };
+      const tr = document.createElement("tr");
+      const values = [
+        row.symbol,
+        row.interval,
+        bingxHistFormatTime(row.first),
+        bingxHistFormatTime(row.last),
+        String(row.count),
+        String(row.gaps),
+        String(row.added || 0),
+        row.status
+      ];
+      values.forEach((value, index) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        if (index === 7 && row.statusClass) td.className = row.statusClass;
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    }
+  }
+
+  async function bingxHistRefreshOne(pair) {
+    const records = await bingxHistGetAllForPair(pair.key);
+    const intervalMs = BINGX_HIST.intervalMs[pair.interval];
+    const previous = bingxHistState.rows.get(pair.key) || {};
+    bingxHistState.rows.set(pair.key, {
+      ...previous,
+      symbol: pair.symbol,
+      interval: pair.interval,
+      first: records.length ? records[0].openTime : null,
+      last: records.length ? records[records.length - 1].openTime : null,
+      count: records.length,
+      gaps: bingxHistGapCount(records, intervalMs),
+      status: previous.status || (records.length ? "已載入本機資料" : "尚無資料"),
+      statusClass: previous.statusClass || (records.length ? "bingx-history-good" : "")
+    });
+    return records;
+  }
+
+  async function bingxHistRefreshAll() {
+    if (!bingxHistState.db) throw new Error("本機資料庫尚未初始化");
+    for (const pair of bingxHistPairs) await bingxHistRefreshOne(pair);
+    bingxHistRenderRows();
+    const all = await bingxHistGetAll();
+    const total = all.length;
+    document.getElementById("bingxHistoryExport").disabled = total === 0;
+    bingxHistSetStatus(`本機資料檢查完成。\n已保存 K 線：${total.toLocaleString("en-US")} 根\n資料庫：${BINGX_HIST.dbName}\n目前顯示缺口為時間間隔估算，需配合交易所實際 K 線供應情況判讀。`, "bingx-history-good");
+  }
+
+  async function bingxHistRun() {
+    if (bingxHistState.running) return;
+    bingxHistState.running = true;
+    bingxHistState.stopRequested = false;
+    document.getElementById("bingxHistoryStart").disabled = true;
+    document.getElementById("bingxHistoryStop").disabled = false;
+    document.getElementById("bingxHistoryExport").disabled = true;
+
+    let totalAdded = 0;
+    let completed = 0;
+    try {
+      bingxHistSetStatus("正在取得 BingX 合約資訊與各合約 launchTime……");
+      const contracts = await bingxHistGetContracts();
+      await new Promise(resolve => setTimeout(resolve, BINGX_HIST.requestGapMs));
+      const contractMap = new Map(contracts.map(item => [String(item.symbol || "").toUpperCase(), item]));
+      const contractInfo = new Map();
+
+      for (const symbol of BINGX_HIST.symbols) {
+        const contract = contractMap.get(symbol);
+        if (!contract) throw new Error(`BingX 合約清單找不到 ${symbol}；請確認該合約是否已在 BingX 上架。`);
+        const launchTime = Number(contract.launchTime);
+        if (!Number.isFinite(launchTime) || launchTime <= 0) {
+          throw new Error(`${symbol} 的 launchTime 缺失或格式錯誤；不會自行猜測最早日期。`);
+        }
+        contractInfo.set(symbol, launchTime);
+      }
+
+      for (const pair of bingxHistPairs) {
+        if (bingxHistState.stopRequested) break;
+        const launchTime = contractInfo.get(pair.symbol);
+        const intervalMs = BINGX_HIST.intervalMs[pair.interval];
+        const existing = await bingxHistRefreshOne(pair);
+        const ranges = bingxHistBuildRanges(existing, launchTime, intervalMs, Date.now());
+        let added = 0;
+        const statusText = ranges.length ? `下載中（${ranges.length} 個區段）` : "已是最新";
+        bingxHistState.rows.set(pair.key, {
+          ...bingxHistState.rows.get(pair.key),
+          status: statusText,
+          statusClass: "bingx-history-warn",
+          added: 0
+        });
+        bingxHistRenderRows();
+
+        for (let rangeIndex = 0; rangeIndex < ranges.length; rangeIndex++) {
+          if (bingxHistState.stopRequested) break;
+          const range = ranges[rangeIndex];
+          const count = await bingxHistDownloadRange(pair, range, (pageCount, segmentAdded) => {
+            bingxHistSetStatus(
+              `下載進行中：${pair.symbol} ${pair.interval}\n區段 ${rangeIndex + 1}/${ranges.length}\n本區段已取得：${segmentAdded.toLocaleString("en-US")} 根\n本次累計新增／更新：${(totalAdded + added + pageCount).toLocaleString("en-US")} 根\n停止按鈕會在目前 API 請求完成後停止後續分頁。`
+            );
+          });
+          added += count;
+          await new Promise(resolve => setTimeout(resolve, BINGX_HIST.requestGapMs));
+        }
+
+        totalAdded += added;
+        const refreshed = await bingxHistRefreshOne(pair);
+        const current = bingxHistState.rows.get(pair.key);
+        bingxHistState.rows.set(pair.key, {
+          ...current,
+          added,
+          status: bingxHistState.stopRequested ? "已依要求停止" : "完成",
+          statusClass: bingxHistState.stopRequested ? "bingx-history-warn" : "bingx-history-good"
+        });
+        bingxHistRenderRows();
+        completed++;
+        bingxHistSetStatus(
+          `研究資料下載進度：${completed}/${bingxHistPairs.length} 組\n目前處理：${pair.symbol} ${pair.interval}\n本次新增／更新：${totalAdded.toLocaleString("en-US")} 根\n${bingxHistState.stopRequested ? "已收到停止要求，正在保留已完成資料。" : "繼續處理下一組資料……"}`
+        );
+      }
+
+      const all = await bingxHistGetAll();
+      document.getElementById("bingxHistoryExport").disabled = all.length === 0;
+      if (bingxHistState.stopRequested) {
+        bingxHistSetStatus(`已停止後續下載。\n已完成組數：${completed}/${bingxHistPairs.length}\n本次新增／更新：${totalAdded.toLocaleString("en-US")} 根\n已完成資料均保留在本機 IndexedDB。`, "bingx-history-warn");
+      } else {
+        bingxHistSetStatus(`全部下載流程完成。\n完成組數：${completed}/${bingxHistPairs.length}\n本次新增／更新：${totalAdded.toLocaleString("en-US")} 根\n本機總保存量：${all.length.toLocaleString("en-US")} 根\n請查看各組缺口估算，並匯出 CSV 備份。`, "bingx-history-good");
+      }
+    } catch (error) {
+      bingxHistSetStatus(`下載中止：${String(error.message || error)}\n已寫入本機的資料會保留；請先檢查錯誤原因，再重新執行。`, "bingx-history-error");
+    } finally {
+      bingxHistState.running = false;
+      document.getElementById("bingxHistoryStart").disabled = false;
+      document.getElementById("bingxHistoryStop").disabled = true;
+    }
+  }
+
+  function bingxHistCsvEscape(value) {
+    return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  }
+
+  async function bingxHistExportCsv() {
+    const rows = await bingxHistGetAll();
+    if (!rows.length) {
+      bingxHistSetStatus("目前沒有可匯出的 K 線資料。", "bingx-history-warn");
+      return;
+    }
+    rows.sort((a, b) => a.symbol.localeCompare(b.symbol) ||
+      BINGX_HIST.intervals.indexOf(a.interval) - BINGX_HIST.intervals.indexOf(b.interval) ||
+      a.openTime - b.openTime);
+    const headers = [
+      "symbol", "interval", "open_time_ms", "open_time_taiwan",
+      "open", "high", "low", "close", "volume", "close_time_ms",
+      "quote_volume", "trades", "taker_buy_base_volume", "taker_buy_quote_volume", "source"
+    ];
+    const csvRows = rows.map(item => [
+      item.symbol, item.interval, item.openTime, bingxHistFormatTime(item.openTime),
+      item.open, item.high, item.low, item.close, item.volume, item.closeTime,
+      item.quoteVolume, item.trades, item.takerBuyBaseVolume, item.takerBuyQuoteVolume, item.source
+    ]);
+    const content = "\uFEFF" + [headers, ...csvRows].map(row => row.map(bingxHistCsvEscape).join(",")).join("\r\n");
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "bingx_historical_klines_CLAUDIA_JCT_FLOAT.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    bingxHistSetStatus(`CSV 匯出已觸發。\n匯出 K 線：${rows.length.toLocaleString("en-US")} 根\n檔名：bingx_historical_klines_CLAUDIA_JCT_FLOAT.csv`, "bingx-history-good");
+  }
+
+  async function bingxHistInit() {
+    bingxHistAddStyle();
+    bingxHistBuildModule();
+    document.getElementById("bingxHistoryStart").addEventListener("click", bingxHistRun);
+    document.getElementById("bingxHistoryStop").addEventListener("click", () => {
+      bingxHistState.stopRequested = true;
+      bingxHistSetStatus("已收到停止要求；目前正在執行的 API 請求完成後，將停止後續下載。", "bingx-history-warn");
+    });
+    document.getElementById("bingxHistoryExport").addEventListener("click", bingxHistExportCsv);
+    document.getElementById("bingxHistoryRefresh").addEventListener("click", async () => {
+      try { await bingxHistRefreshAll(); }
+      catch (error) { bingxHistSetStatus(`重新檢查失敗：${String(error.message || error)}`, "bingx-history-error"); }
+    });
+
+    if (!window.indexedDB) throw new Error("此瀏覽器不支援 IndexedDB，無法安全保存大量歷史資料");
+    bingxHistState.db = await bingxHistOpenDb();
+    await bingxHistRefreshAll();
+  }
+
+  bingxHistInit().catch(error => {
+    bingxHistSetStatus(`第四項初始化失敗：${String(error.message || error)}`, "bingx-history-error");
+  });
+})();
+/* ===== 第四項新增程式結束 ===== */
 
 </script>
 </body>
