@@ -1,36 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幣安掃描器｜MACD 背離＋山寨幣菁英篩選</title>
 
-/* =========================================================
-   BingX 歷史資料搜尋系統
-   新增獨立功能，不修改原有 MACD／異常／交易優勢程式
-========================================================= */
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #111827;
+  --panel: #1f2937;
+  --line: #374151;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --yellow: #f0b90b;
+  --green: #34d399;
+  --red: #fb7185;
+  --orange: #fbbf24;
+}
 
-const BINGX_HISTORY = {
-  base: "https://open-api.bingx.com",
-  symbols: ["CLAUDIA-USDT", "JCT-USDT", "FLOAT-USDT"],
-  intervals: ["1d", "4h", "1h", "30m", "15m"],
-  limit: 1440,
-  delay: 1100,
-  dbName: "BingX_Historical_Research",
-  dbVersion: 1
-};
+* { box-sizing: border-box; }
 
-let bingxHistoryDB = null;
-let bingxHistoryRunning = false;
-let bingxHistoryPauseRequested = false;
+body {
+  margin: 0;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, "Microsoft JhengHei", sans-serif;
+}
 
-const bingxIntervalMs = {
-  "1d": 86400000,
-  "4h": 14400000,
-  "1h": 3600000,
-  "30m": 1800000,
-  "15m": 900000
-};
+main {
+  max-width: 1500px;
+  margin: auto;
+}
 
-function bingxSleep(ms) {
+h1 { font-size: 24px; }
+
+button {
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--yellow);
+  color: #111827;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 4px;
+}
+
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: var(--panel);
+  padding: 14px;
+  border-radius: 10px;
+  margin: 14px 0;
+}
+
+#status {
+  margin: 14px 4px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wrap {
+  overflow: auto;
+  max-height: 65vh;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: var(--yellow);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.results-detail { display: none; }
+
+.up { color: var(--green); }
+.down { color: var(--red); }
+.warn { color: var(--orange); }
+.muted { color: var(--muted); }
+
+.badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: bold;
+  margin: 2px 3px 2px 0;
+  white-space: nowrap;
+}
+
+.resonance-good {
+  background: #064e3b;
+  color: #6ee7b7;
+  border: 1px solid #059669;
+}
+
+.resonance-none {
+  background: #374151;
+  color: #d1d5db;
+  border: 1px solid #6b7280;
+}
+
+.resonance-mismatch {
+  background: #78350f;
+  color: #fde68a;
+  border: 1px solid #d97706;
+}
+
+.resonance-error {
+  background: #7f1d1d;
+  color: #fecaca;
+  border: 1px solid #dc2626;
+}
+
+.funding-positive { color: var(--red); }
+.funding-negative { color: var(--green); }
+.funding-zero { color: var(--muted); }
+
+input, select {
+  padding: 9px;
+  margin: 4px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--yellow);
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.signal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+@media (max-width: 700px) {
+  body { padding: 10px; }
+  h1 { font-size: 20px; }
+  th, td { padding: 8px; }
+}
+
+/* 獨立模組切換與異常波動掃描器 */
+.module-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.module-tab { background:#374151; color:var(--text); border:1px solid #4b5563; }
+.module-tab.active { background:var(--yellow); color:#111827; border-color:var(--yellow); }
+.module-panel[hidden] { display:none !important; }
+.signal-drop { color:#fca5a5; font-weight:bold; }
+.signal-up { color:#6ee7b7; font-weight:bold; }
+.signal-watch { color:#fcd34d; font-weight:bold; }
+.metric-good { color:#6ee7b7; }
+.metric-bad { color:#fca5a5; }
+.small-note { font-size:11px; color:var(--muted); white-space:normal; min-width:180px; max-width:300px; }
+#anomalyStatus { margin:14px 4px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; }
+#anomalyResults td { vertical-align:top; }
+.sort-header { appearance:none; border:0; background:transparent; color:inherit; font:inherit; font-weight:700; cursor:pointer; padding:3px 2px; white-space:nowrap; }
+.sort-header:hover, .sort-header:focus-visible { text-decoration:underline; color:var(--accent, #2563eb); }
+.sort-mark { display:inline-block; margin-left:3px; opacity:.65; font-size:.85em; }
+.sort-header[aria-sort="ascending"] .sort-mark::after { content:"↑"; }
+.sort-header[aria-sort="descending"] .sort-mark::after { content:"↓"; }
+.sort-header[aria-sort="ascending"] .sort-mark, .sort-header[aria-sort="descending"] .sort-mark { font-size:0; }
+.sort-header[aria-sort="ascending"] .sort-mark::after, .sort-header[aria-sort="descending"] .sort-mark::after { font-size:14px; }
+
+
+/* ===== 第三項：交易優勢評估系統（新增樣式，不覆蓋既有樣式）===== */
+.edge-summary { display:flex; flex-wrap:wrap; gap:10px; margin:10px 0; }
+.edge-chip { background:#111827; border:1px solid #374151; border-radius:8px; padding:8px 10px; }
+.edge-table-wrap { overflow:auto; max-height:65vh; }
+#edgeResults td { vertical-align:top; }
+.edge-detail { white-space:normal; min-width:220px; max-width:360px; }
+.edge-alert { color:#fbbf24; font-weight:bold; }
+.edge-confirm { color:#34d399; font-weight:bold; }
+.edge-bear { color:#fb7185; font-weight:bold; }
+.edge-neutral { color:#9ca3af; }
+
+</style>
+</head>
+
+<body>
+<main>
+<h1>幣安 MACD 背離掃描器</h1>
+
+<p>
+  日線有效背離｜資金費率｜USDT 永續合約
+</p>
+
+<div class="module-tabs" role="tablist" aria-label="掃描模組">
+  <button type="button" class="module-tab active" id="tabMacd" aria-selected="true">MACD 背離掃描</button>
+  <button type="button" class="module-tab" id="tabAnomaly" aria-selected="false">異常波動前兆掃描</button>
+  <button type="button" class="module-tab" id="tabEdge" aria-selected="false">交易優勢評估</button>
+</div>
+
+<section id="macdModule" class="module-panel"> 
+<div class="panel">
+  <button id="scan">開始掃描</button>
+  <button id="exportSignals" disabled>匯出有效背離 CSV</button>
+
+  <div id="status">尚未開始掃描。</div>
+
+  <div class="note">
+    MACD 背離掃描僅使用日線（1D）資料判斷頂背離與底背離。
+    資金費率來自 Binance 公開行情 API。正資金費率通常代表多方支付空方，
+    負資金費率則通常代表空方支付多方。
+  </div>
+</div>
+
+<div class="panel">
+  <strong>目前有效日線背離</strong>
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>幣種</th>
+          <th>MACD 背離</th>
+          <th>資金費率</th>
+          <th>下一次結算時間</th>
+          <th class="results-detail">背離日期</th>
+          <th class="results-detail">價格變化</th>
+          <th class="results-detail">DIF 變化</th>
+          <th class="results-detail">RSI</th>
+          <th class="results-detail">RSI 狀態</th>
+          <th class="results-detail">RSI 狀態天數</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
+</div>
+
+<details class="panel">
+  <summary><strong>進階資訊：逐合約掃描稽核（點擊展開）</strong></summary>
+
+  <button id="exportAudit" disabled>匯出稽核 CSV</button>
+
+  <p class="note">
+    這裡保留掃描狀態、資料筆數、配對數與排除原因。
+  </p>
+
+  <label for="auditFilter">篩選：</label>
+  <select id="auditFilter">
+    <option value="all">全部合約</option>
+    <option value="ok">成功完成</option>
+    <option value="error">請求失敗</option>
+    <option value="insufficient">資料不足</option>
+    <option value="signal">有日線訊號</option>
+    <option value="none">無日線訊號</option>
+  </select>
+
+  <input id="auditSearch" placeholder="搜尋合約，例如 BTCUSDT">
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>合約</th>
+          <th>狀態</th>
+          <th>收到 K 線</th>
+          <th>已收盤 K 線</th>
+          <th>價格高點</th>
+          <th>價格低點</th>
+          <th>DIF 高點</th>
+          <th>DIF 低點</th>
+          <th>高點配對</th>
+          <th>低點配對</th>
+          <th>背離組數</th>
+          <th>訊號數</th>
+          <th>排除／錯誤原因</th>
+        </tr>
+      </thead>
+      <tbody id="auditResults"></tbody>
+    </table>
+  </div>
+</details>
+
+<p class="note">
+  注意：背離及共振只是技術訊號，不保證價格反轉。
+  資金費率會隨市場變動；本程式只讀取公開資料，不會替你下單。
+</p>
+
+</section>
+
+
+<section id="edgeModule" class="module-panel" hidden>
+  <div class="panel">
+    <strong>交易優勢評估系統｜獨立全市場掃描</strong>
+    <p class="note">
+      先以 4H 市場結構找方向，再以 1H 結構／流動性事件辨識候選；候選再補查 15m、OI、資金費率與主動買賣比。
+      「提前觀察」與「條件確認」分開顯示。這是研究篩選，不是自動下單或獲利保證。
+    </p>
+    <label for="edgeMinVolume">24H 最低成交額</label>
+    <select id="edgeMinVolume">
+      <option value="5000000">500 萬 USDT</option>
+      <option value="10000000" selected>1,000 萬 USDT</option>
+      <option value="25000000">2,500 萬 USDT</option>
+    </select>
+    <button id="scanEdge">開始交易優勢掃描</button>
+    <button id="exportEdge" disabled>匯出第三項 CSV</button>
+    <div id="edgeStatus">尚未開始交易優勢掃描。</div>
+    <div class="note">
+      起始規則：4H 最近已確認波段高低點判斷結構；1H 掃過前高／前低並收回視為流動性掃蕩候選；突破已確認波段點視為 BOS／CHOCH 候選。
+      15m 用於觀察成交量及收盤方向。所有訊號只使用當時已收盤 K 線；右側 2 根 K 線確認轉折，因此會有確認延遲。
+    </div>
+  </div>
+  <div class="panel">
+    <strong>交易優勢候選名單</strong>
+    <div class="edge-summary" id="edgeSummary"></div>
+    <div class="edge-table-wrap">
+      <table>
+        <thead><tr>
+          <th><button type="button" class="sort-header" data-edge-sort="symbol">幣種 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="stage">階段／方向 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="structure">4H 結構 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="event">1H 事件 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="m15">15m 觀察 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="oiChange">OI 變化 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="oiActivity">建倉／平倉觀察 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="fundingLatest">最新資金費率 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="funding1h">1H 費率 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="funding2h">2H 費率 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="funding4h">4H 費率 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="fundingTrend">費率趨勢 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="takerRatio">主動買賣比 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="quoteVolume24h">24H 成交額 ↕</button></th>
+          <th><button type="button" class="sort-header" data-edge-sort="reason">判斷依據／限制
+ ↕</button></th>
+        </tr></thead>
+        <tbody id="edgeResults"></tbody>
+      </table>
+    </div>
+  </div>
+  <details class="panel">
+    <summary><strong>第三項資料來源與判斷限制（點擊展開）</strong></summary>
+    <ul class="note">
+      <li>合約清單、24H 成交額：Binance USDⓈ-M Futures 公開 REST API：/fapi/v1/exchangeInfo、/fapi/v1/ticker/24hr。</li>
+      <li>K 線：Binance USDⓈ-M Futures /fapi/v1/klines（4H、1H、15m）。</li>
+      <li>OI：Binance Futures Data /futures/data/openInterestHist（5m）；只比較事件前可取得的歷史端點。</li>
+      <li>資金費率：Binance /fapi/v1/fundingRate；僅查事件時間前最近 4 小時的結算紀錄，並另取最新已結算費率；1H／2H／4H 若沒有足夠結算資料會標示資料不足。</li>
+      <li>主動買賣比：Binance Futures Data /futures/data/takerlongshortRatio（5m）。它是公開統計比值，不是逐筆訂單流 Delta。</li>
+      <li>本版本不抓清算資料、不推測巨鯨身份，也不宣稱能看到真實機構訂單。訂單簿深度未納入本版判斷。</li>
+      <li>OI 增加／減少代表市場未平倉合約總量增加／減少，不等於多倉或空倉單方面增加／減少；價格搭配 OI 僅提供建倉／平倉活動線索。</li>
+      <li>結構與掃蕩規則是第一版可測試規則，尚未經回測證明具有正期望值。請勿直接視為買賣建議。</li>
+    </ul>
+  </details>
+</section>
+
+<section id="anomalyModule" class="module-panel" hidden>
+  <div class="panel">
+    <strong>異常波動前兆掃描｜獨立於 MACD</strong>
+    <p class="note">
+      全部 Binance USDT 永續合約先經過異常事件篩選，再驗證流動性、OI、主動買賣量與走勢品質。只有通過硬性條件且評分達標者才列入菁英名單。此功能獨立於 MACD；不保證預測行情。
+    </p>
+    <div>
+      <label for="anomalyRangeMultiplier">振幅倍數門檻</label>
+      <select id="anomalyRangeMultiplier">
+        <option value="2.5" selected>2.5 倍</option>
+        <option value="3">3 倍</option>
+        <option value="4">4 倍</option>
+      </select>
+      <label for="anomalyVolumeMultiplier">成交額倍數門檻</label>
+      <select id="anomalyVolumeMultiplier">
+        <option value="2">2 倍</option>
+        <option value="3" selected>3 倍</option>
+        <option value="5">5 倍</option>
+      </select>
+      <button id="scanAnomaly">開始異常掃描</button>
+      <button id="exportAnomaly" disabled>匯出異常掃描 CSV</button>
+    </div>
+    <div id="anomalyStatus">尚未開始異常波動掃描。</div>
+    <div class="note">
+      嚴格模式初始門檻：振幅至少為前 40 根中位數的 2.5 倍、成交額至少為前 20 根中位數的 3 倍、成交筆數至少為前 20 根中位數的 2 倍；24 小時成交額至少 1,000 萬 USDT、買賣價差不超過 0.15%。這些是待回測的起始參數。
+    </div>
+  </div>
+
+  <div class="panel">
+    <strong>異常事件候選名單</strong>
+    <div class="wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><button type="button" class="sort-header" data-sort-key="symbol">幣種 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="score">等級／分數 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="signal">分類 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="eventTime">異常 K 棒時間（台灣） <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="changePct">該根漲跌幅 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="rangeRatio">振幅／基準 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="volumeRatio">成交額／基準 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="tradesRatio">成交筆數／基準 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="quoteVolume24h">24H 成交額 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="spreadPct">買賣價差 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="oiChange">事件前 1 小時 OI 變化 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="fundingRate">歷史資金費率 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="takerRatio">主動買賣比 <span class="sort-mark">↕</span></button></th>
+            <th><button type="button" class="sort-header" data-sort-key="explanation">觀察說明 <span class="sort-mark">↕</span></button></th>
+          </tr>
+        </thead>
+        <tbody id="anomalyResults"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <details class="panel">
+    <summary><strong>異常掃描邏輯與資料限制（點擊展開）</strong></summary>
+    <ul class="note">
+      <li>振幅基準：事件前最多 40 根已收盤 15 分鐘 K 棒中位數；成交額與成交筆數基準：事件前最多 20 根 K 棒中位數。</li>
+      <li>菁英硬性條件：振幅、成交額、成交筆數均達門檻；24 小時成交額至少 1,000 萬 USDT；買賣價差不超過 0.15%；並需有 OI 或主動買賣量支持。</li>
+      <li>評分 100 分：異常振幅／成交額 25、OI 25、主動買賣 20、後續走勢 20、流動性／資金費率風險 10。80 分為 A 級，90 分為 A+；未通過硬性條件者不會升級。</li>
+      <li>OI：使用事件時間之前 1 小時的 Binance Open Interest History（5 分鐘），比較可取得序列的首尾值；若端點無資料會顯示「無資料」。</li>
+      <li>資金費率：顯示事件時間之前最近一次已結算的歷史資金費率與結算時間，並非歷史每分鐘預估費率。</li>
+      <li>主動買賣比：使用 Binance taker long/short ratio 公開資料，顯示最近資料的買／賣量比；大於 1 代表主動買入量較多，小於 1 代表主動賣出量較多。</li>
+      <li>清算量：本版本不將無法可靠批次取得的清算資料假造為數值，暫不納入候選排序。</li>
+      <li>第一階段掃描所有合約；第二階段最多補查 40 個異常候選，以降低 API 限流風險。</li>
+      <li>異常事件在發生後才可確認其後續 K 棒反應；「止跌觀察」不代表事前預測成功。</li>
+    </ul>
+  </details>
+</section>
+
+</main>
+
+<script>
+"use strict";
+
+const API = "https://fapi.binance.com";
+const $ = id => document.getElementById(id);
+
+let allSignals = [];
+let allAudit = [];
+let fundingMap = new Map();
+let isRunning = false;
+
+function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function bingxTaipeiTime(timestamp) {
+async function getJSON(url) {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("HTTP " + response.status);
+  }
+
+  return response.json();
+}
+
+/* EMA 指數移動平均 */
+function ema(values, period) {
+  const out = Array(values.length).fill(null);
+
+  if (values.length < period) return out;
+
+  let value = values.slice(0, period)
+    .reduce((sum, x) => sum + x, 0) / period;
+
+  out[period - 1] = value;
+
+  const k = 2 / (period + 1);
+
+  for (let i = period; i < values.length; i++) {
+    value = values[i] * k + value * (1 - k);
+    out[i] = value;
+  }
+
+  return out;
+}
+
+/* RSI */
+function rsi(values, period = 14) {
+  const out = Array(values.length).fill(null);
+
+  if (values.length <= period) return out;
+
+  let gains = 0;
+  let losses = 0;
+
+  for (let i = 1; i <= period; i++) {
+    const change = values[i] - values[i - 1];
+
+    if (change > 0) gains += change;
+    else losses -= change;
+  }
+
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+
+  out[period] = avgLoss === 0
+    ? 100
+    : 100 - 100 / (1 + avgGain / avgLoss);
+
+  for (let i = period + 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+
+    avgGain =
+      (avgGain * (period - 1) + Math.max(change, 0)) / period;
+
+    avgLoss =
+      (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
+
+    out[i] = avgLoss === 0
+      ? 100
+      : 100 - 100 / (1 + avgGain / avgLoss);
+  }
+
+  return out;
+}
+
+/* RSI 狀態與連續天數／K 線數 */
+function rsiStates(values) {
+  const status = Array(values.length).fill("一般");
+  const days = Array(values.length).fill(0);
+
+  let mode = "一般";
+  let count = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+
+    if (value === null || !Number.isFinite(value)) {
+      status[i] = "資料不足";
+      days[i] = 0;
+      continue;
+    }
+
+    const next = value >= 80
+      ? "超買"
+      : value <= 20
+        ? "超賣"
+        : "一般";
+
+    if (next !== mode) {
+      mode = next;
+      count = next === "一般" ? 0 : 1;
+    } else if (next !== "一般") {
+      count++;
+    } else {
+      count = 0;
+    }
+
+    status[i] = mode;
+    days[i] = count;
+  }
+
+  return { status, days };
+}
+
+/* 價格或 DIF 的局部高低點 */
+function pivots(values, kind, left = 2, right = 2) {
+  const result = [];
+
+  for (let i = left; i < values.length - right; i++) {
+    const value = values[i];
+
+    if (value === null || !Number.isFinite(value)) continue;
+
+    const window = values.slice(i - left, i + right + 1);
+
+    if (window.some(v => v === null || !Number.isFinite(v))) {
+      continue;
+    }
+
+    const target = kind === "high"
+      ? Math.max(...window)
+      : Math.min(...window);
+
+    if (value !== target) continue;
+
+    if (window.filter(v => v === value).length !== 1) continue;
+
+    result.push(i);
+  }
+
+  return result;
+}
+
+/* 將價格轉折點配對到附近的 DIF 轉折點 */
+function pairPivots(pricePivots, difPivots) {
+  const candidates = [];
+
+  for (const p of pricePivots) {
+    for (const d of difPivots) {
+      const distance = Math.abs(p - d);
+
+      if (distance <= 2) {
+        candidates.push({ p, d, distance });
+      }
+    }
+  }
+
+  candidates.sort((a, b) =>
+    a.distance - b.distance ||
+    a.p - b.p ||
+    a.d - b.d
+  );
+
+  const usedPrice = new Set();
+  const usedDif = new Set();
+  const pairs = [];
+
+  for (const item of candidates) {
+    if (usedPrice.has(item.p) || usedDif.has(item.d)) continue;
+
+    usedPrice.add(item.p);
+    usedDif.add(item.d);
+
+    pairs.push([item.p, item.d]);
+  }
+
+  return pairs.sort((a, b) => a[0] - b[0]);
+}
+
+function baseAudit(symbol, interval) {
+  return {
+    symbol,
+    interval,
+    status: "處理中",
+    rawCandles: 0,
+    closedCandles: 0,
+    priceHigh: 0,
+    priceLow: 0,
+    difHigh: 0,
+    difLow: 0,
+    highPairs: 0,
+    lowPairs: 0,
+    candidateGroups: 0,
+    signalCount: 0,
+    reasons: []
+  };
+}
+
+/*
+ * 背離有效條件：
+ *
+ * 頂背離：
+ * 1. 價格高點抬高
+ * 2. DIF 高點降低
+ * 3. 兩個 DIF 高點都在零軸上方
+ * 4. DEA 觸及或跌破零軸後解除舊訊號
+ *
+ * 底背離：
+ * 1. 價格低點降低
+ * 2. DIF 低點抬高
+ * 3. 兩個 DIF 低點都在零軸下方
+ * 4. DEA 觸及或突破零軸後解除舊訊號
+ */
+function findSignals(
+  kind,
+  pairs,
+  prices,
+  dif,
+  dea,
+  dates,
+  audit,
+  symbol,
+  rsiValues,
+  rsiStatus,
+  rsiDays
+) {
+  const name = kind === "high" ? "頂背離" : "底背離";
+  const isTop = kind === "high";
+  const found = [];
+
+  audit.candidateGroups += Math.max(0, pairs.length - 1);
+
+  if (pairs.length < 2) {
+    audit.reasons.push(name + "：配對少於兩個，無法比較");
+    return found;
+  }
+
+  let activeSignal = null;
+  let lastResetIndex = -1;
+  let scanCursor = 0;
+  let hadGap = false;
+  let hadDivergence = false;
+
+  function scanZeroAxis(from, to) {
+    for (
+      let i = Math.max(0, from);
+
+      i <= to && i < dea.length;
+      i++
+    ) {
+      const value = dea[i];
+
+      if (value === null || !Number.isFinite(value)) continue;
+
+      const reset = isTop ? value <= 0 : value >= 0;
+
+      if (reset) {
+        lastResetIndex = i;
+        activeSignal = null;
+      }
+    }
+  }
+
+  for (let j = 1; j < pairs.length; j++) {
+    const [p1, d1] = pairs[j - 1];
+    const [p2, d2] = pairs[j];
+
+    scanZeroAxis(scanCursor, p2);
+    scanCursor = p2 + 1;
+
+    const gap = p2 - p1;
+
+    if (gap < 5 || gap > 60) continue;
+
+    hadGap = true;
+
+    const valid = isTop
+      ? prices[p2] > prices[p1] &&
+        dif[d2] < dif[d1] &&
+        dif[d1] > 0 &&
+        dif[d2] > 0
+      : prices[p2] < prices[p1] &&
+        dif[d2] > dif[d1] &&
+        dif[d1] < 0 &&
+        dif[d2] < 0;
+
+    if (!valid) continue;
+
+    hadDivergence = true;
+
+    /* 不允許重新使用零軸解除前的價格轉折點 */
+    if (p1 <= lastResetIndex || p2 <= lastResetIndex) {
+      continue;
+    }
+
+    activeSignal = {
+      symbol,
+      signal: isTop ? "MACD頂背離" : "MACD底背離",
+      count: 1,
+      date1: dates[p1],
+      date2: dates[p2],
+      index1: p1,
+      index2: p2,
+      price1: prices[p1],
+      price2: prices[p2],
+      dif1: dif[d1],
+      dif2: dif[d2],
+      rsi: rsiValues[p2],
+      rsiStatus: rsiStatus[p2],
+      rsiDays: rsiDays[p2]
+    };
+  }
+
+  scanZeroAxis(scanCursor, dea.length - 1);
+
+  if (activeSignal) {
+    found.push(activeSignal);
+  } else if (!hadGap) {
+    audit.reasons.push(name + "：沒有 5–60 根 K 線間隔的配對");
+  } else if (!hadDivergence) {
+    audit.reasons.push(name + "：配對不符合背離條件");
+  } else {
+    audit.reasons.push(
+      name + "：背離已被 DEA 零軸條件解除，或尚未形成新背離"
+    );
+  }
+
+  return found;
+}
+
+/* 掃描單一幣種的日線或 4 小時 K 線 */
+async function scanSymbol(symbol, interval = "1d") {
+  const audit = baseAudit(symbol, interval);
+
+  try {
+    const url =
+      `${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}` +
+      `&interval=${encodeURIComponent(interval)}&limit=240`;
+
+    const raw = await getJSON(url);
+
+    if (!Array.isArray(raw)) {
+      throw new Error("K 線回傳格式不正確");
+    }
+
+    audit.rawCandles = raw.length;
+
+    const now = Date.now();
+
+    /* 只使用已收盤 K 線 */
+    const candles = raw.filter(
+      candle => Number(candle[6]) < now
+    );
+
+    audit.closedCandles = candles.length;
+
+    if (candles.length < 80) {
+      audit.status = "資料不足";
+      audit.reasons.push("已收盤 K 線少於 80 根");
+      return { signals: [], audit };
+    }
+
+    const close = candles.map(c => Number(c[4]));
+    const high = candles.map(c => Number(c[2]));
+    const low = candles.map(c => Number(c[3]));
+
+    const dates = candles.map(c =>
+      new Date(Number(c[0])).toISOString().slice(0, 10)
+    );
+
+    if (
+      [...close, ...high, ...low].some(v => !Number.isFinite(v))
+    ) {
+      throw new Error("K 線包含無效價格");
+    }
+
+    const fast = ema(close, 12);
+    const slow = ema(close, 26);
+
+    const dif = close.map((_, i) =>
+      fast[i] === null || slow[i] === null
+        ? null
+        : fast[i] - slow[i]
+    );
+
+    const first = dif.findIndex(v => v !== null);
+
+    if (first < 0) {
+      throw new Error("無法計算 DIF");
+    }
+
+    const dea = Array(first).fill(null).concat(
+      ema(dif.slice(first), 9)
+    );
+
+    const rsiValues = rsi(close, 14);
+    const states = rsiStates(rsiValues);
+    const signals = [];
+
+    for (const kind of ["high", "low"]) {
+      const priceValues = kind === "high" ? high : low;
+
+      const pricePivots = pivots(priceValues, kind, 2, 2);
+      const difPivots = pivots(dif, kind, 2, 2);
+
+      if (kind === "high") {
+        audit.priceHigh = pricePivots.length;
+        audit.difHigh = difPivots.length;
+      } else {
+        audit.priceLow = pricePivots.length;
+        audit.difLow = difPivots.length;
+      }
+
+      const pairs = pairPivots(pricePivots, difPivots);
+
+      if (kind === "high") audit.highPairs = pairs.length;
+      else audit.lowPairs = pairs.length;
+
+      signals.push(...findSignals(
+        kind,
+        pairs,
+        priceValues,
+        dif,
+        dea,
+        dates,
+        audit,
+        symbol,
+        rsiValues,
+        states.status,
+        states.days
+      ));
+    }
+
+    audit.signalCount = signals.length;
+    audit.status = "成功完成";
+
+    if (!signals.length && !audit.reasons.length) {
+      audit.reasons.push("沒有符合條件的訊號");
+    }
+
+    return { signals, audit };
+
+  } catch (error) {
+    audit.status = "請求失敗";
+    audit.reasons.push(String(error.message || error));
+
+    return { signals: [], audit };
+  }
+}
+
+/*
+ * 取得所有 USDT 永續合約的最新資金費率。
+ * premiumIndex 公開行情包含 lastFundingRate 與 nextFundingTime。
+ */
+async function loadFundingRates() {
+  const data = await getJSON(API + "/fapi/v1/premiumIndex");
+
+  if (!Array.isArray(data)) {
+    throw new Error("資金費率 API 回傳格式不正確");
+  }
+
+  const nextMap = new Map();
+
+  for (const item of data) {
+    if (!item.symbol) continue;
+
+    const rate = Number(item.lastFundingRate);
+    const nextTime = Number(item.nextFundingTime);
+
+    nextMap.set(item.symbol, {
+      rate: Number.isFinite(rate) ? rate : null,
+      nextTime: Number.isFinite(nextTime) ? nextTime : null
+    });
+  }
+
+  fundingMap = nextMap;
+}
+
+/* 資金費率轉換為百分比字串 */
+function formatFunding(symbol) {
+  const item = fundingMap.get(symbol);
+
+  if (!item || item.rate === null) {
+    return {
+      text: "暫無資料",
+      className: "muted",
+      nextTime: item?.nextTime || null
+    };
+  }
+
+  const percentage = item.rate * 100;
+
+  return {
+    text: (percentage > 0 ? "+" : "") + percentage.toFixed(4) + "%",
+    className: percentage > 0
+      ? "funding-positive"
+      : percentage < 0
+        ? "funding-negative"
+        : "funding-zero",
+    nextTime: item.nextTime
+  };
+}
+
+function formatNextTime(timestamp) {
   if (!timestamp) return "—";
 
   return new Date(timestamp).toLocaleString("zh-TW", {
@@ -44,554 +976,1054 @@ function bingxTaipeiTime(timestamp) {
   });
 }
 
-function bingxSetStatus(message) {
-  const el = $("bingxStatus");
-  if (el) el.textContent = message;
+/* CSV 欄位跳脫 */
+function esc(value) {
+  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
 }
 
-/* ---------- IndexedDB 初始化 ---------- */
+function downloadCSV(filename, headers, rows) {
+  const content = "\uFEFF" +
+    [headers, ...rows]
+      .map(row => row.map(esc).join(","))
+      .join("\r\n");
 
-function bingxOpenDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(
-      BINGX_HISTORY.dbName,
-      BINGX_HISTORY.dbVersion
-    );
-
-    request.onupgradeneeded = event => {
-      const db = event.target.result;
-
-      if (!db.objectStoreNames.contains("candles")) {
-        const store = db.createObjectStore("candles", {
-          keyPath: ["symbol", "interval", "openTime"]
-        });
-
-        store.createIndex(
-          "series",
-          ["symbol", "interval"],
-          { unique: false }
-        );
-      }
-    };
-
-    request.onsuccess = () => {
-      bingxHistoryDB = request.result;
-      resolve(bingxHistoryDB);
-    };
-
-    request.onerror = () => {
-      reject(request.error || new Error("資料庫開啟失敗"));
-    };
+  const blob = new Blob([content], {
+    type: "text/csv;charset=utf-8;"
   });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  a.href = url;
+  a.download = filename;
+  a.click();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/* ---------- BingX API ---------- */
-
-async function bingxRequest(path, params = {}) {
-  const query = new URLSearchParams(params).toString();
-  const url = `${BINGX_HISTORY.base}${path}?${query}`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`BingX HTTP ${response.status}`);
-  }
-
-  const json = await response.json();
-
-  if (
-    json.code !== undefined &&
-    Number(json.code) !== 0
-  ) {
-    throw new Error(
-      `BingX API 錯誤：${json.code} ${json.msg || ""}`
-    );
-  }
-
-  return json.data;
-}
-
-/* ---------- 取得合約上架時間 ---------- */
-
-async function bingxGetContracts() {
-  const data = await bingxRequest(
-    "/openApi/swap/v2/quote/contracts"
-  );
-
-  if (!Array.isArray(data)) {
-    throw new Error("BingX 合約清單格式不正確");
-  }
-
-  return data;
-}
-
-/* ---------- K 線格式整理 ---------- */
-
-function bingxNormalizeCandles(raw, symbol, interval) {
-  if (!Array.isArray(raw)) {
-    throw new Error(`${symbol} ${interval} K 線格式錯誤`);
-  }
-
-  const now = Date.now();
-
-  return raw.map(c => ({
-    symbol,
-    interval,
-    openTime: Number(c[0]),
-    open: Number(c[1]),
-    high: Number(c[2]),
-    low: Number(c[3]),
-    close: Number(c[4]),
-    volume: Number(c[5]),
-    closeTime: Number(c[6]),
-    quoteVolume: Number(c[7]),
-    trades: Number(c[8]),
-    takerBuyBase: Number(c[9]),
-    takerBuyQuote: Number(c[10])
-  })).filter(c => {
-    return (
-      Number.isFinite(c.openTime) &&
-      Number.isFinite(c.closeTime) &&
-      c.closeTime < now &&
-      [
-        c.open, c.high, c.low, c.close,
-        c.volume, c.quoteVolume
-      ].every(Number.isFinite)
-    );
-  }).sort((a, b) => a.openTime - b.openTime);
-}
-
-/* ---------- 保存 K 線 ---------- */
-
-function bingxSaveCandles(candles) {
-  return new Promise((resolve, reject) => {
-    const tx = bingxHistoryDB.transaction(
-      ["candles"],
-      "readwrite"
-    );
-
-    const store = tx.objectStore("candles");
-
-    for (const candle of candles) {
-      store.put(candle);
-    }
-
-    tx.oncomplete = () => resolve(candles.length);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error("保存中止"));
-  });
-}
-
-/* ---------- 取得某組資料最新時間 ---------- */
-
-function bingxGetLatest(symbol, interval) {
-  return new Promise((resolve, reject) => {
-    const tx = bingxHistoryDB.transaction(
-      ["candles"],
-      "readonly"
-    );
-
-    const index = tx.objectStore("candles").index("series");
-
-    const range = IDBKeyRange.only([symbol, interval]);
-
-    const request = index.openCursor(range, "prev");
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      resolve(cursor ? cursor.value.openTime : null);
-    };
-
-    request.onerror = () => reject(request.error);
-  });
-}
-
-/* ---------- 取得整組資料 ---------- */
-
-function bingxGetSeries(symbol, interval) {
-  return new Promise((resolve, reject) => {
-    const tx = bingxHistoryDB.transaction(
-      ["candles"],
-      "readonly"
-    );
-
-    const index = tx.objectStore("candles").index("series");
-
-    const request = index.getAll(
-      IDBKeyRange.only([symbol, interval])
-    );
-
-    request.onsuccess = () => {
-      resolve(
-        (request.result || []).sort(
-          (a, b) => a.openTime - b.openTime
-        )
-      );
-    };
-
-    request.onerror = () => reject(request.error);
-  });
-}
-
-/* ---------- 下載單一幣種、單一週期 ---------- */
-
-async function bingxDownloadSeries(contract, interval) {
-  const symbol = contract.symbol;
-  const intervalMs = bingxIntervalMs[interval];
-
-  if (!intervalMs) {
-    throw new Error(`不支援週期：${interval}`);
-  }
-
-  const launchTime = Number(contract.launchTime);
-
-  if (!Number.isFinite(launchTime) || launchTime <= 0) {
-    throw new Error(
-      `${symbol} 找不到有效 launchTime，不能假設上架時間`
-    );
-  }
-
-  const latestSaved = await bingxGetLatest(symbol, interval);
-
-  let cursor = latestSaved !== null
-    ? latestSaved + intervalMs
-    : launchTime;
-
-  let totalDownloaded = 0;
-  let page = 0;
-  let finished = false;
-
-  while (!finished) {
-    if (bingxHistoryPauseRequested) {
-      return {
-        paused: true,
-        totalDownloaded
-      };
-    }
-
-    const data = await bingxRequest(
-      "/openApi/swap/v3/quote/klines",
-      {
-        symbol,
-        interval,
-        startTime: String(cursor),
-        endTime: String(Date.now()),
-        limit: String(BINGX_HISTORY.limit)
-      }
-    );
-
-    const candles = bingxNormalizeCandles(
-      data,
-      symbol,
-      interval
-    );
-
-    if (!candles.length) {
-      finished = true;
-      break;
-    }
-
-    await bingxSaveCandles(candles);
-
-    totalDownloaded += candles.length;
-    page++;
-
-    const lastTime = candles[candles.length - 1].openTime;
-
-    if (lastTime < cursor) {
-      throw new Error("K 線時間沒有向前推進，已停止避免重複下載");
-    }
-
-    cursor = lastTime + intervalMs;
-
-    bingxSetStatus(
-      `目前下載：${symbol} ${interval}\n` +
-      `本次頁數：${page}\n` +
-      `本次新增資料：${totalDownloaded} 根\n` +
-      `目前進度時間：${bingxTaipeiTime(lastTime)}\n` +
-      `資料已逐批保存，可暫停後續傳。`
-    );
-
-    if (candles.length < BINGX_HISTORY.limit) {
-      finished = true;
-    } else {
-      await bingxSleep(BINGX_HISTORY.delay);
-    }
-  }
-
-  return {
-    paused: false,
-    totalDownloaded
-  };
-}
-
-/* ---------- 檢查資料缺口 ---------- */
-
-function bingxCountGaps(candles, interval) {
-  const intervalMs = bingxIntervalMs[interval];
-  let gaps = 0;
-
-  for (let i = 1; i < candles.length; i++) {
-    const difference =
-      candles[i].openTime - candles[i - 1].openTime;
-
-    if (difference > intervalMs) {
-      gaps += Math.max(
-        0,
-        Math.round(difference / intervalMs) - 1
-      );
-    }
-  }
-
-  return gaps;
-}
-
-/* ---------- 顯示資料檢查表 ---------- */
-
-async function bingxRenderAudit() {
-  const body = $("bingxHistoryResults");
+/* 顯示主搜尋結果 */
+function renderSignals() {
+  const body = $("results");
   body.replaceChildren();
 
-  for (const symbol of BINGX_HISTORY.symbols) {
-    for (const interval of BINGX_HISTORY.intervals) {
-      const candles = await bingxGetSeries(symbol, interval);
+  /* 頂背離與底背離分組 */
+  allSignals.sort((a, b) => {
+    const directionA = a.signal.includes("頂") ? 0 : 1;
+    const directionB = b.signal.includes("頂") ? 0 : 1;
 
-      const first = candles[0];
-      const last = candles[candles.length - 1];
-      const gaps = bingxCountGaps(candles, interval);
+    return directionA - directionB ||
+      a.symbol.localeCompare(b.symbol) ||
+      b.date2.localeCompare(a.date2);
+  });
 
-      const tr = document.createElement("tr");
+  for (const item of allSignals) {
+    const tr = document.createElement("tr");
 
-      const cells = [
-        symbol,
-        interval,
-        candles.length.toLocaleString("en-US"),
-        first ? bingxTaipeiTime(first.openTime) : "—",
-        last ? bingxTaipeiTime(last.openTime) : "—",
-        gaps.toLocaleString("en-US"),
-        candles.length
-          ? (gaps ? "有缺口，待檢查" : "目前未發現時間缺口")
-          : "尚無資料"
-      ];
+    /* 幣種 */
+    const symbolCell = document.createElement("td");
+    symbolCell.textContent = item.symbol;
+    tr.appendChild(symbolCell);
 
-      for (const value of cells) {
-        const td = document.createElement("td");
-        td.textContent = value;
-        tr.appendChild(td);
-      }
+    /* 背離標籤 */
+    const signalCell = document.createElement("td");
+    signalCell.className = "signal-cell";
 
-      body.appendChild(tr);
+    const signalText = document.createElement("span");
+    signalText.className =
+      item.signal.includes("頂") ? "down" : "up";
+    signalText.textContent = item.signal.replace("MACD", "");
+
+    signalCell.appendChild(signalText);
+    tr.appendChild(signalCell);
+
+    /* 資金費率 */
+    const funding = formatFunding(item.symbol);
+
+    const fundingCell = document.createElement("td");
+    const fundingText = document.createElement("span");
+
+    fundingText.className = funding.className;
+    fundingText.textContent = funding.text;
+    fundingCell.appendChild(fundingText);
+
+    const fundingNote = document.createElement("div");
+    fundingNote.className = "note";
+    fundingNote.textContent = "最新已公布費率";
+    fundingCell.appendChild(fundingNote);
+
+    tr.appendChild(fundingCell);
+
+    /* 下一次資金費率結算時間 */
+    const timeCell = document.createElement("td");
+    timeCell.textContent = formatNextTime(funding.nextTime);
+    tr.appendChild(timeCell);
+
+    /* 詳細資料：預設隱藏 */
+    const details = [
+      `${item.date1} → ${item.date2}`,
+      `${item.price1} → ${item.price2}`,
+      `${item.dif1.toFixed(8)} → ${item.dif2.toFixed(8)}`,
+      item.rsi == null ? "—" : item.rsi.toFixed(1),
+      item.rsiStatus,
+      item.rsiDays ? `第 ${item.rsiDays} 根 K 線` : "—"
+    ];
+
+    for (const value of details) {
+      const td = document.createElement("td");
+      td.className = "results-detail";
+      td.textContent = value;
+      tr.appendChild(td);
     }
+
+    body.appendChild(tr);
   }
 }
 
-/* ---------- 開始或續傳全部資料 ---------- */
+/* 顯示逐合約稽核 */
+function renderAudit() {
+  const body = $("auditResults");
+  body.replaceChildren();
 
-async function bingxStartDownload() {
-  if (bingxHistoryRunning) return;
+  const filter = $("auditFilter").value;
+  const search = $("auditSearch").value.trim().toUpperCase();
 
-  bingxHistoryRunning = true;
-  bingxHistoryPauseRequested = false;
+  const rows = allAudit.filter(audit => {
+    const matchesSearch =
+      !search || audit.symbol.includes(search);
 
-  $("bingxStart").disabled = true;
-  $("bingxPause").disabled = false;
-
-  try {
-    await bingxOpenDB();
-
-    bingxSetStatus("正在取得 BingX 合約清單……");
-
-    const contracts = await bingxGetContracts();
-
-    const contractMap = new Map(
-      contracts.map(c => [c.symbol, c])
-    );
-
-    const missing = BINGX_HISTORY.symbols.filter(
-      symbol => !contractMap.has(symbol)
-    );
-
-    if (missing.length) {
-      throw new Error(
-        "BingX 找不到以下合約：" + missing.join("、") +
-        "。請先確認合約名稱或是否仍可查詢。"
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "ok" && audit.status === "成功完成") ||
+      (filter === "error" && audit.status === "請求失敗") ||
+      (filter === "insufficient" && audit.status === "資料不足") ||
+      (filter === "signal" && audit.signalCount > 0) ||
+      (
+        filter === "none" &&
+        audit.signalCount === 0 &&
+        audit.status === "成功完成"
       );
-    }
 
-    let completed = 0;
-    const total =
-      BINGX_HISTORY.symbols.length *
-      BINGX_HISTORY.intervals.length;
+    return matchesSearch && matchesFilter;
+  });
 
-    for (const symbol of BINGX_HISTORY.symbols) {
-      const contract = contractMap.get(symbol);
+  for (const audit of rows) {
+    const tr = document.createElement("tr");
 
-      for (const interval of BINGX_HISTORY.intervals) {
-        if (bingxHistoryPauseRequested) break;
+    const values = [
+      audit.symbol,
+      audit.status,
+      audit.rawCandles,
+      audit.closedCandles,
+      audit.priceHigh,
+      audit.priceLow,
+      audit.difHigh,
+      audit.difLow,
+      audit.highPairs,
+      audit.lowPairs,
+      audit.candidateGroups,
+      audit.signalCount,
+      audit.reasons.join("；") || "—"
+    ];
 
-        bingxSetStatus(
-          `下載中：${symbol} ${interval}\n` +
-          `整體組數：${completed}/${total}\n` +
-          `正在取得歷史 K 線……`
-        );
+    values.forEach((value, index) => {
+      const
+ td = document.createElement("td");
+      td.textContent = value;
 
-        const result = await bingxDownloadSeries(
-          contract,
-          interval
-        );
-
-        if (result.paused) break;
-
-        completed++;
-
-        await bingxRenderAudit();
-
-        await bingxSleep(BINGX_HISTORY.delay);
+      if (index === 1) {
+        td.className =
+          audit.status === "成功完成" ? "up" : "warn";
       }
 
-      if (bingxHistoryPauseRequested) break;
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  }
+}
+
+$("auditFilter").addEventListener("change", renderAudit);
+$("auditSearch").addEventListener("input", renderAudit);
+
+/* 匯出有效背離及資金費率 */
+$("exportSignals").addEventListener("click", () => {
+  downloadCSV(
+    "macd_divergence_funding_rates.csv",
+    [
+      "symbol",
+      "daily_signal",
+      "funding_rate_percent",
+      "next_funding_time",
+      "date1",
+      "date2",
+      "price1",
+      "price2",
+      "dif1",
+      "dif2",
+      "rsi",
+      "rsi_status",
+      "rsi_days"
+    ],
+    allSignals.map(item => {
+      const funding = formatFunding(item.symbol);
+
+      return [
+        item.symbol,
+        item.signal,
+        funding.text,
+        formatNextTime(funding.nextTime),
+        item.date1,
+        item.date2,
+        item.price1,
+        item.price2,
+        item.dif1,
+        item.dif2,
+        item.rsi,
+        item.rsiStatus,
+        item.rsiDays
+      ];
+    })
+  );
+});
+
+/* 匯出稽核 */
+$("exportAudit").addEventListener("click", () => {
+  downloadCSV(
+    "macd_scanner_audit.csv",
+    [
+      "symbol",
+      "interval",
+      "status",
+      "rawCandles",
+      "closedCandles",
+      "priceHigh",
+      "priceLow",
+      "difHigh",
+      "difLow",
+      "highPairs",
+      "lowPairs",
+      "candidateGroups",
+      "signalCount",
+      "reasons"
+    ],
+    allAudit.map(audit => [
+      audit.symbol,
+      audit.interval,
+      audit.status,
+      audit.rawCandles,
+      audit.closedCandles,
+      audit.priceHigh,
+      audit.priceLow,
+      audit.difHigh,
+      audit.difLow,
+      audit.highPairs,
+      audit.lowPairs,
+      audit.candidateGroups,
+      audit.signalCount,
+      audit.reasons.join("；")
+    ])
+  );
+});
+
+/* 開始掃描 */
+$("scan").addEventListener("click", async () => {
+  if (isRunning) return;
+
+  isRunning = true;
+
+  $("scan").disabled = true;
+  $("exportSignals").disabled = true;
+  $("exportAudit").disabled = true;
+
+  $("results").replaceChildren();
+  $("auditResults").replaceChildren();
+
+  allSignals = [];
+  allAudit = [];
+  fundingMap = new Map();
+
+  let fundingError = null;
+
+  try {
+    $("status").textContent = "正在取得 Binance 合約清單……";
+
+    const info = await getJSON(API + "/fapi/v1/exchangeInfo");
+
+    if (!info || !Array.isArray(info.symbols)) {
+      throw new Error("合約清單格式不正確，停止掃描");
     }
 
-    if (bingxHistoryPauseRequested) {
-      bingxSetStatus(
-        "下載已暫停。\n" +
-        "已完成的資料都已保存。\n" +
-        "再次按「開始下載歷史資料」即可續傳。"
-      );
-    } else {
-      bingxSetStatus(
-        "第一輪歷史 K 線下載完成。\n" +
-        "請按「檢查已下載資料」檢查資料筆數及時間缺口。\n" +
-        "完成後請匯出 CSV 備份。"
-      );
+    const symbols = info.symbols
+      .filter(item =>
+        item.status === "TRADING" &&
+        item.contractType === "PERPETUAL" &&
+        item.quoteAsset === "USDT"
+      )
+      .map(item => item.symbol);
+
+    if (!symbols.length) {
+      throw new Error("沒有取得可掃描的 USDT 永續合約");
     }
+
+    /* 資金費率只需一次批次請求 */
+    $("status").textContent = "正在取得最新資金費率……";
+
+    try {
+      await loadFundingRates();
+    } catch (error) {
+      fundingError = String(error.message || error);
+    }
+
+    const total = symbols.length;
+
+    for (let i = 0; i < total; i++) {
+      const symbol = symbols[i];
+
+      /* 第一步：日線 */
+      const daily = await scanSymbol(symbol, "1d");
+      allAudit.push(daily.audit);
+
+      for (const dailySignal of daily.signals) {
+        allSignals.push(dailySignal);
+      }
+
+      if ((i + 1) % 5 === 0 || i === total - 1) {
+        renderAudit();
+        renderSignals();
+      }
+
+      $("status").textContent =
+        `掃描進度：${i + 1}/${total}` +
+        `\n日線有效背離：${allSignals.length}` +
+        `\n資金費率：${fundingError ? "取得失敗" : "已取得"}`;
+
+      /* 稍微放慢請求速度 */
+      await sleep(120);
+    }
+
+    renderSignals();
+    renderAudit();
+
+    $("status").textContent =
+      `掃描完成` +
+      `\n日線有效背離：${allSignals.length}` +
+      `\n資金費率：${fundingError ? "取得失敗：" + fundingError : "已取得"}`;
+
+    $("exportSignals").disabled = false;
+    $("exportAudit").disabled = false;
 
   } catch (error) {
-    bingxSetStatus(
-      "下載發生錯誤：\n" +
-      String(error.message || error) +
-      "\n已保存的資料不會因這次錯誤而自動刪除。"
-    );
+    $("status").textContent =
+      "掃描中止：" + String(error.message || error) +
+      "\n請檢查網路連線、瀏覽器限制或 Binance API 狀態。";
 
   } finally {
-    bingxHistoryRunning = false;
-    $("bingxStart").disabled = false;
-    $("bingxPause").disabled = true;
+    isRunning = false;
+    $("scan").disabled = false;
   }
+});
+
+/* =========================
+   異常波動事件／早期追蹤掃描器（獨立模組）
+   不改動原本 MACD 背離的掃描與判斷邏輯
+========================= */
+const anomalyState = {
+  running: false,
+  sortKey: null,
+  sortDirection: "asc",
+  rows: [],
+  audit: { scanned: 0, candidates: 0, enriched: 0, errors: 0 }
+};
+
+function setActiveModule(name) {
+  const macd = name === "macd";
+  $("macdModule").hidden = !macd;
+  $("anomalyModule").hidden = macd;
+  $("tabMacd").classList.toggle("active", macd);
+  $("tabAnomaly").classList.toggle("active", !macd);
+  $("tabMacd").setAttribute("aria-selected", String(macd));
+  $("tabAnomaly").setAttribute("aria-selected", String(!macd));
+}
+$("tabMacd").addEventListener("click", () => setActiveModule("macd"));
+$("tabAnomaly").addEventListener("click", () => setActiveModule("anomaly"));
+
+function median(values) {
+  const valid = values.filter(v => Number.isFinite(v)).sort((a,b) => a-b);
+  if (!valid.length) return null;
+  const mid = Math.floor(valid.length / 2);
+  return valid.length % 2 ? valid[mid] : (valid[mid - 1] + valid[mid]) / 2;
 }
 
-/* ---------- 匯出全部 K 線 ---------- */
+function formatPct(value, digits = 2) {
+  if (!Number.isFinite(value)) return "無資料";
+  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+}
 
-async function bingxExportAll() {
-  await bingxOpenDB();
+function formatRatio(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)} 倍` : "無資料";
+}
 
-  const headers = [
-    "symbol",
-    "interval",
-    "open_time",
-    "open_time_taipei",
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "close_time",
-    "quote_volume",
-    "trades",
-    "taker_buy_base",
-    "taker_buy_quote"
-  ];
+function formatLocalTime(timestamp) {
+  if (!Number.isFinite(timestamp)) return "無資料";
+  return new Date(timestamp).toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false
+  });
+}
 
-  const rows = [];
+function analyzeAnomalyCandles(symbol, raw, rangeThreshold, volumeThreshold) {
+  if (!Array.isArray(raw)) return null;
+  const now = Date.now();
+  const candles = raw.filter(c => Number(c[6]) < now);
+  if (candles.length < 24) return null;
 
-  for (const symbol of BINGX_HISTORY.symbols) {
-    for (const interval of BINGX_HISTORY.intervals) {
-      const candles = await bingxGetSeries(symbol, interval);
+  const start = Math.max(40, candles.length - 6);
+  const candidates = [];
 
-      for (const c of candles) {
-        rows.push([
-          c.symbol,
-          c.interval,
-          c.openTime,
-          bingxTaipeiTime(c.openTime),
-          c.open,
-          c.high,
-          c.low,
-          c.close,
-          c.volume,
-          c.closeTime,
-          c.quoteVolume,
-          c.trades,
-          c.takerBuyBase,
-          c.takerBuyQuote
-        ]);
+  for (let i = start; i < candles.length; i++) {
+    const c = candles[i];
+    const open = Number(c[1]), high = Number(c[2]), low = Number(c[3]), close = Number(c[4]);
+    const quoteVolume = Number(c[7]);
+    if (![open, high, low, close, quoteVolume].every(Number.isFinite) || open <= 0) continue;
+
+    const rangePct = (high - low) / open * 100;
+    const changePct = (close - open) / open * 100;
+    const baselineStart = Math.max(0, i - 40);
+    const baseline = candles.slice(baselineStart, i);
+    const volumeBaseline = candles.slice(Math.max(0, i - 20), i);
+    const baselineRange = median(baseline.map(k => {
+      const o = Number(k[1]), h = Number(k[2]), l = Number(k[3]);
+      return o > 0 ? (h - l) / o * 100 : null;
+    }).filter(Number.isFinite));
+    const baselineVolume = median(volumeBaseline.map(k => Number(k[7])).filter(v => Number.isFinite(v) && v > 0));
+    const baselineTrades = median(volumeBaseline.map(k => Number(k[8])).filter(v => Number.isFinite(v) && v > 0));
+    if (!(baselineRange > 0) || !(baselineVolume > 0) || !(baselineTrades > 0)) continue;
+
+    const rangeRatio = rangePct / baselineRange;
+    const volumeRatio = quoteVolume / baselineVolume;
+    const tradesRatio = Number(c[8]) / baselineTrades;
+    const classic = rangeRatio >= rangeThreshold && volumeRatio >= volumeThreshold && tradesRatio >= 2;
+    if (!classic) continue;
+
+    const future = candles.slice(i + 1, Math.min(candles.length, i + 4));
+    const futureLows = future.map(k => Number(k[3])).filter(Number.isFinite);
+    const futureHighs = future.map(k => Number(k[2])).filter(Number.isFinite);
+    const futureCloses = future.map(k => Number(k[4])).filter(Number.isFinite);
+    let signal = "異常波動追蹤";
+    let explanation = "價格／成交額異常，屬事件發生後追蹤，並非事前預測";
+
+    if (close < open) {
+      const heldLow = futureLows.length > 0 && Math.min(...futureLows) >= low;
+      const recovered = futureCloses.length > 0 && futureCloses[futureCloses.length - 1] > close;
+      if (heldLow && recovered) {
+        signal = "急跌止跌觀察";
+        explanation = "後續 K 棒未再破低，且收盤價收復急跌 K 棒收盤價；仍需確認買盤";
+      } else if (futureLows.length > 0 && Math.min(...futureLows) < low) {
+        signal = "下跌延續風險";
+        explanation = "後續 K 棒跌破事件低點，暫不視為止跌";
+      } else {
+        signal = "急跌事件追蹤";
+        explanation = "出現放量下跌，尚未同時滿足止跌確認條件";
+      }
+    } else if (close > open) {
+      const brokeHigh = futureHighs.length > 0 && Math.max(...futureHighs) > high;
+      const heldClose = futureCloses.length > 0 && futureCloses[futureCloses.length - 1] > close;
+      if (brokeHigh && heldClose) {
+        signal = "上漲／軋空觀察";
+        explanation = "後續價格突破事件高點並維持在事件收盤價上方；需搭配 OI 與空頭清算確認";
+      } else {
+        signal = "異常上漲追蹤";
+        explanation = "出現放量上漲，但後續延續條件尚未完整";
       }
     }
+
+    candidates.push({
+      symbol,
+      eventTime: Number(c[0]),
+      open, high, low, close, quoteVolume,
+      changePct, rangePct, rangeRatio, volumeRatio, tradesRatio,
+      signal, explanation,
+      eventLow: low, eventHigh: high
+    });
   }
 
-  if (!rows.length) {
-    bingxSetStatus("目前沒有可匯出的資料。");
-    return;
-  }
-
-  downloadCSV(
-    "BingX_Historical_Klines_All.csv",
-    headers,
-    rows
-  );
-
-  bingxSetStatus(
-    `CSV 匯出已觸發。\n總資料筆數：${rows.length.toLocaleString("en-US")}`
-  );
+  if (!candidates.length) return null;
+  candidates.sort((a,b) => b.eventTime - a.eventTime);
+  return candidates[0];
 }
 
-/* ---------- 按鈕事件 ---------- */
+async function mapWithConcurrency(items, concurrency, worker) {
+  let next = 0;
+  const workers = Array.from({length: Math.min(concurrency, items.length)}, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+}
 
-$("bingxStart").addEventListener(
-  "click",
-  bingxStartDownload
-);
+async function enrichAnomalyCandidate(item, liquidity = {}) {
+  item.quoteVolume24h = Number(liquidity.quoteVolume);
+  item.spreadPct = Number(liquidity.spreadPct);
+  const symbol = encodeURIComponent(item.symbol);
+  /* 儘量以事件時間為界，避免拿事件之後的數據假裝成事前訊號。 */
+  const eventTime = Number(item.eventTime);
+  const oneHourBefore = eventTime - 60 * 60 * 1000;
+  const sevenDaysBefore = eventTime - 7 * 24 * 60 * 60 * 1000;
+ 
+ const tasks = await Promise.allSettled([
+    getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`),
+    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${sevenDaysBefore}&endTime=${eventTime}&limit=100`),
+    getJSON(`${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${oneHourBefore}&endTime=${eventTime}&limit=12`)
+  ]);
 
-$("bingxPause").addEventListener("click", () => {
-  bingxHistoryPauseRequested = true;
-  bingxSetStatus("已提出暫停要求，正在完成目前這一批資料……");
+  item.oiChange = null;
+  item.oiNote = "無資料";
+  item.fundingRate = null;
+  item.fundingTime = null;
+  item.takerRatio = null;
+  item.dataNotes = [];
+
+  const oiResult = tasks[0];
+  if (oiResult.status === "fulfilled" && Array.isArray(oiResult.value) && oiResult.value.length >= 2) {
+    const series = oiResult.value
+      .map(x => ({time:Number(x.timestamp), oi:Number(x.sumOpenInterest)}))
+      .filter(x => Number.isFinite(x.time) && Number.isFinite(x.oi));
+    if (series.length >= 2 && series[0].oi !== 0) {
+      item.oiChange = (series[series.length - 1].oi / series[0].oi - 1) * 100;
+      item.oiNote = formatPct(item.oiChange);
+    } else {
+      item.oiNote = "資料不足";
+    }
+  } else {
+    item.oiNote = "無資料／端點限制";
+    item.dataNotes.push("OI");
+  }
+
+  const fundingResult = tasks[1];
+  if (fundingResult.status === "fulfilled" && Array.isArray(fundingResult.value) && fundingResult.value.length) {
+    const rates = fundingResult.value
+      .map(x => ({time:Number(x.fundingTime), rate:Number(x.fundingRate)}))
+      .filter(x => Number.isFinite(x.time) && Number.isFinite(x.rate))
+      .sort((a,b) => b.time-a.time);
+    if (rates.length) {
+      item.fundingRate = rates[0].rate * 100;
+      item.fundingTime = rates[0].time;
+    }
+  } else {
+    item.dataNotes.push("歷史資金費率");
+  }
+
+  const takerResult = tasks[2];
+  if (takerResult.status === "fulfilled" && Array.isArray(takerResult.value) && takerResult.value.length) {
+    const series = takerResult.value
+      .map(x => ({time:Number(x.timestamp), ratio:Number(x.buySellRatio)}))
+      .filter(x => Number.isFinite(x.time) && Number.isFinite(x.ratio))
+      .sort((a,b) => b.time-a.time);
+    if (series.length) item.takerRatio = series[0].ratio;
+  } else {
+    item.dataNotes.push("主動買賣比");
+  }
+
+  item.fundingDisplay = Number.isFinite(item.fundingRate)
+    ? `${item.fundingRate > 0 ? "+" : ""}${item.fundingRate.toFixed(4)}%（事件前最近結算 ${formatLocalTime(item.fundingTime)}）`
+    : "無歷史資料";
+  item.takerDisplay = Number.isFinite(item.takerRatio)
+    ? `${item.takerRatio.toFixed(3)}（買／賣）`
+    : "無資料";
+  item.oiNote = item.oiNote || "無資料";
+  return item;
+}
+
+function scoreEliteCandidate(item) {
+  let score = 0;
+  // 25 points: price range and quote-volume anomaly
+  score += Math.min(12.5, Math.max(0, (item.rangeRatio - 1) / 2) * 12.5);
+  score += Math.min(12.5, Math.max(0, (item.volumeRatio - 1) / 2) * 12.5);
+  // 25 points: OI magnitude and scenario coherence
+  if (Number.isFinite(item.oiChange)) {
+    score += Math.min(15, Math.abs(item.oiChange) / 2 * 15);
+    const coherent = (item.changePct > 0 && item.oiChange > 0) || (item.changePct < 0 && item.oiChange > 0) || (item.changePct < 0 && item.oiChange < 0 && item.signal.includes("止跌"));
+    if (coherent) score += 10;
+  }
+  // 20 points: taker imbalance
+  if (Number.isFinite(item.takerRatio)) {
+    const imbalance = Math.abs(Math.log(Math.max(0.01, item.takerRatio)));
+    score += Math.min(20, imbalance / Math.log(1.5) * 20);
+  }
+  // 20 points: follow-through quality
+  if (item.signal.includes("止跌") || item.signal.includes("上漲／軋空")) score += 20;
+  else if (item.signal.includes("下跌延續")) score += 8;
+  else score += 10;
+  // 10 points: liquidity and funding risk
+  if (Number.isFinite(item.quoteVolume24h) && item.quoteVolume24h >= 1e7) score += 4;
+  if (Number.isFinite(item.spreadPct) && item.spreadPct <= 0.15) score += 3;
+  if (Number.isFinite(item.fundingRate) && Math.abs(item.fundingRate) <= 0.08) score += 3;
+  item.score = Math.round(Math.min(100, score));
+  item.hardPass = item.rangeRatio >= 2.5 && item.volumeRatio >= 3 && item.tradesRatio >= 2 && item.quoteVolume24h >= 1e7 && item.spreadPct <= 0.15 && (Math.abs(item.oiChange || 0) >= 2 || (Number.isFinite(item.takerRatio) && (item.takerRatio >= 1.5 || item.takerRatio <= 0.67)));
+  item.tier = !item.hardPass ? "未通過硬性條件" : item.score >= 90 ? "A+ 菁英" : item.score >= 80 ? "A 級觀察" : item.score >= 70 ? "70–79 分觀察" : "未達 70 分";
+  return item;
+}
+
+function anomalySignalClass(signal) {
+  if (signal.includes("止跌") || signal.includes("上漲")) return "signal-up";
+  if (signal.includes("下跌")) return "signal-drop";
+  return "signal-watch";
+}
+
+function renderAnomalyRows() {
+  const body = $("anomalyResults");
+  body.replaceChildren();
+
+  const priority = signal => {
+    if (signal.includes("上漲／軋空")) return 0;
+    if (signal.includes("急跌止跌")) return 1;
+    if (signal.includes("急跌事件")) return 2;
+    if (signal.includes("下跌延續")) return 4;
+    return 3;
+  };
+  const sortKey = anomalyState.sortKey;
+  const rows = [...anomalyState.rows].filter(item => Number.isFinite(item.score) && item.score >= 70).sort((a,b) => {
+    if (!sortKey) {
+      return priority(a.signal)-priority(b.signal) || (b.volumeRatio-a.volumeRatio) || (b.rangeRatio-a.rangeRatio);
+    }
+    let av = a[sortKey], bv = b[sortKey];
+    // 缺失數值放在最後；文字分類以中文／數字符合自然排序。
+    const numericKeys = new Set(["score","eventTime","changePct","rangeRatio","volumeRatio","tradesRatio","quoteVolume24h","spreadPct","oiChange","fundingRate","takerRatio"]);
+    let cmp;
+    if (numericKeys.has(sortKey)) {
+      av = Number(av); bv = Number(bv);
+      const aMissing = !Number.isFinite(av), bMissing = !Number.isFinite(bv);
+      if (aMissing || bMissing) cmp = aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+      else cmp = av - bv;
+    } else {
+      av = String(av ?? ""); bv = String(bv ?? "");
+      cmp = av.localeCompare(bv, "zh-Hant", {numeric:true, sensitivity:"base"});
+    }
+    return anomalyState.sortDirection === "desc" ? -cmp : cmp;
+  });
+  document.querySelectorAll(".sort-header").forEach(button => {
+    const active = button.dataset.sortKey === anomalyState.sortKey;
+    button.setAttribute("aria-sort", active ? (anomalyState.sortDirection === "asc" ? "ascending" : "descending") : "none");
+    const mark = button.querySelector(".sort-mark");
+    if (mark) mark.textContent = active ? (anomalyState.sortDirection === "asc" ? "↑" : "↓") : "↕";
+  });
+
+  for (const item of rows) {
+    const tr = document.createElement("tr");
+    const cells = [
+      {value:item.symbol},
+      {value:`${item.tier || "待評分"}（${Number.isFinite(item.score) ? item.score : "—"}）`, cls:item.tier === "A+ 菁英" ? "signal-up" : item.hardPass ? "signal-watch" : "muted"},
+      {value:item.signal, cls:anomalySignalClass(item.signal)},
+      {value:formatLocalTime(item.eventTime)},
+      {value:formatPct(item.changePct)},
+      {value:`${item.rangeRatio.toFixed(2)} 倍（${item.rangePct.toFixed(2)}%）`},
+      {value:`${item.volumeRatio.toFixed(2)} 倍（${item.quoteVolume.toLocaleString("en-US",{maximumFractionDigits:0})} USDT）`},
+      {value:formatRatio(item.tradesRatio)},
+      {value:Number.isFinite(item.quoteVolume24h) ? `${(item.quoteVolume24h/1e6).toFixed(2)}M USDT` : "無資料"},
+      {value:Number.isFinite(item.spreadPct) ? `${item.spreadPct.toFixed(3)}%` : "無資料"},
+      {value:item.oiNote || "無資料", cls:Number.isFinite(item.oiChange) ? (item.oiChange < 0 ? "metric-bad" : "metric-good") : "muted"},
+      {value:item.fundingDisplay || "無歷史資料"},
+      {value:item.takerDisplay || "無資料"},
+      {value:item.explanation + (item.dataNotes?.length ? `；缺少：${item.dataNotes.join("、")}` : ""), cls:"small-note"}
+    ];
+    for (const cell of cells) {
+      const td = document.createElement("td");
+      td.textContent = cell.value;
+      if (cell.cls) td.className = cell.cls;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+document.querySelectorAll(".sort-header").forEach(button => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.sortKey;
+    if (anomalyState.sortKey === key) {
+      anomalyState.sortDirection = anomalyState.sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      anomalyState.sortKey = key;
+      anomalyState.sortDirection = "asc";
+    }
+    renderAnomalyRows();
+  });
 });
 
-$("bingxCheck").addEventListener("click", async () => {
-  try {
-    await bingxOpenDB();
-    await bingxRenderAudit();
+$("exportAnomaly").addEventListener("click", () => {
+  downloadCSV(
+    "binance_anomaly_watchlist.csv",
+    ["symbol","tier","score","hard_pass","signal","event_time_taipei","open","high","low","close","change_pct","range_ratio","volume_ratio","trades_ratio","quote_volume_24h","spread_pct","oi_change_pct","historical_funding_pct","funding_settlement_time","taker_buy_sell_ratio","explanation","data_notes"],
+    anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 70).map(x => [
+      x.symbol, x.tier, x.score, x.hardPass, x.signal, formatLocalTime(x.eventTime), x.open, x.high, x.low, x.close,
+      x.changePct, x.rangeRatio, x.volumeRatio, x.tradesRatio, x.quoteVolume24h, x.spreadPct, x.oiChange, x.fundingRate,
+      formatLocalTime(x.fundingTime), x.takerRatio, x.explanation, (x.dataNotes || []).join(";")
+    ])
+  );
+});
 
-    bingxSetStatus(
-      "資料檢查完成。\n" +
-      "請查看下方各幣種、週期的資料筆數與缺口數。"
-    );
+$("scanAnomaly").addEventListener("click", async () => {
+  if (anomalyState.running) return;
+  anomalyState.running = true;
+  $("scanAnomaly").disabled = true;
+  $("exportAnomaly").disabled = true;
+  $("anomalyResults").replaceChildren();
+  anomalyState.rows = [];
+  anomalyState.audit = { scanned: 0, candidates: 0, enriched: 0, errors: 0 };
+
+  const rangeThreshold = Number($("anomalyRangeMultiplier").value);
+  const volumeThreshold = Number($("anomalyVolumeMultiplier").value);
+
+  try {
+    $("anomalyStatus").textContent = "正在取得 Binance USDT 永續合約清單……";
+    const info = await getJSON(`${API}/fapi/v1/exchangeInfo`);
+    const ticker24h = await getJSON(`${API}/fapi/v1/ticker/24hr`);
+    const bookTicker = await getJSON(`${API}/fapi/v1/ticker/bookTicker`);
+    const liquidityMap = new Map();
+    const
+ bookMap = new Map();
+    if (Array.isArray(ticker24h)) for (const t of ticker24h) liquidityMap.set(t.symbol, Number(t.quoteVolume));
+    if (Array.isArray(bookTicker)) for (const b of bookTicker) { const bid=Number(b.bidPrice), ask=Number(b.askPrice), mid=(bid+ask)/2; bookMap.set(b.symbol, mid>0 ? (ask-bid)/mid*100 : NaN); }
+    if (!Array.isArray(info.symbols)) throw new Error("合約清單格式不正確");
+
+    const symbols = info.symbols
+      .filter(x => x.status === "TRADING" && x.contractType === "PERPETUAL" && x.quoteAsset === "USDT")
+      .map(x => x.symbol);
+
+    const found = [];
+    const errors = [];
+    let completed = 0;
+
+    $("anomalyStatus").textContent = `第一階段：掃描 ${symbols.length} 個 USDT 永續合約的已收盤 15 分鐘 K 線（事件追蹤，不代表可在大行情前預測）……`;
+
+    await mapWithConcurrency(symbols, 5, async symbol => {
+      try {
+        const raw = await getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=15m&limit=60`);
+        const candidate = analyzeAnomalyCandles(symbol, raw, rangeThreshold, volumeThreshold);
+        if (candidate) found.push(candidate);
+      } catch (error) {
+        errors.push(`${symbol}: ${String(error.message || error)}`);
+      } finally {
+        completed++;
+        if (completed % 25 === 0 || completed === symbols.length) {
+          $("anomalyStatus").textContent =
+            `第一階段：${completed}/${symbols.length}\n` +
+            `已發現異常候選：${found.length}\n` +
+            `K 線請求失敗：${errors.length}`;
+        }
+      }
+    });
+
+    found.sort((a,b) => (b.volumeRatio*b.rangeRatio*b.tradesRatio) - (a.volumeRatio*a.rangeRatio*a.tradesRatio));
+    const shortlist = found.slice(0, 40);
+    anomalyState.rows = shortlist;
+    anomalyState.audit = {scanned:symbols.length, candidates:found.length, enriched:0, errors:errors.length};
+
+    $("anomalyStatus").textContent =
+      `第二階段：找到 ${found.length} 個異常候選，正在補查前 ${shortlist.length} 個候選的 OI、歷史資金費率與主動買賣比……`;
+
+    let enrichedCount = 0;
+    await mapWithConcurrency(shortlist, 3, async item => {
+      try {
+        await enrichAnomalyCandidate(item, {quoteVolume:liquidityMap.get(item.symbol), spreadPct:bookMap.get(item.symbol)});
+        scoreEliteCandidate(item);
+      } catch (error) {
+        item.oiNote = item.oiNote || "無資料";
+        item.fundingDisplay = item.fundingDisplay || "無資料";
+        item.takerDisplay = item.takerDisplay || "無資料";
+        item.dataNotes = item.dataNotes || [];
+        item.dataNotes.push("補查請求失敗");
+      } finally {
+        enrichedCount++;
+        anomalyState.audit.enriched = enrichedCount;
+        if (enrichedCount % 5 === 0 || enrichedCount === shortlist.length) {
+          $("anomalyStatus").textContent =
+            `第二階段：${enrichedCount}/${shortlist.length}\n` +
+            `異常候選總數：${found.length}\n` +
+            `K 線請求失敗：${errors.length}`;
+        }
+      }
+    });
+
+    renderAnomalyRows();
+    $("exportAnomaly").disabled = anomalyState.rows.length === 0;
+    $("anomalyStatus").textContent =
+      `異常掃描完成\n` +
+      `掃描合約：${symbols.length}\n` +
+      `符合第一關異常條件：${found.length}\n` +
+      `通過硬性條件：${anomalyState.rows.filter(x => x.hardPass).length}\n` +
+      `A+ 菁英候選：${anomalyState.rows.filter(x => x.tier === "A+ 菁英").length}\n` +
+      `A 級觀察：${anomalyState.rows.filter(x => x.tier === "A 級觀察").length}\n` +
+      `已補查 OI／歷史資金費率／主動買賣比：${shortlist.length}\n` +
+      `K 線請求失敗：${errors.length}\n` +
+      `評分 70 分以上顯示；69 分以下隱藏\n` +
+      `符合顯示評分門檻：${anomalyState.rows.filter(x => Number.isFinite(x.score) && x.score >= 70).length} 個\n` +
+      `顯示名單依目前選擇的欄位排序（初始按振幅倍數 × 成交額倍數）\n` +
+      `注意：這是異常事件／早期追蹤清單，不保證能在大行情發生前預測；資金費率為事件前最近已結算歷史值，不代表事件當分鐘的預估費率。`;
+
   } catch (error) {
-    bingxSetStatus(
-      "資料檢查失敗：" + String(error.message || error)
-    );
+    $("anomalyStatus").textContent = "異常掃描中止：" + String(error.message || error);
+  } finally {
+    anomalyState.running = false;
+    $("scanAnomaly").disabled = false;
   }
 });
 
-$("bingxExport").addEventListener(
-  "click",
-  bingxExportAll
-);
 
-/* ---------- 載入既有資料 ---------- */
+/* =====================================================================
+   第三項：交易優勢評估系統
+   以下為新增程式；不修改原 MACD 與異常波動模組的既有函式及判斷。
+===================================================================== */
+const edgeState = { running:false, rows:[], sortKey:"rank", sortDirection:"desc" };
 
-(async function bingxHistoryInit() {
-  try {
-    await bingxOpenDB();
-    await bingxRenderAudit();
+function setEdgeModule(name) {
+  const macd = name === "macd";
+  const anomaly = name === "anomaly";
+  $("macdModule").hidden = !macd;
+  $("anomalyModule").hidden = !anomaly;
+  $("edgeModule").hidden = name !== "edge";
+  $("tabMacd").classList.toggle("active", macd);
+  $("tabAnomaly").classList.toggle("active", anomaly);
+  $("tabEdge").classList.toggle("active", name === "edge");
+  $("tabMacd").setAttribute("aria-selected", String(macd));
+  $("tabAnomaly").setAttribute("aria-selected", String(anomaly));
+  $("tabEdge").setAttribute("aria-selected", String(name === "edge"));
+}
+$("tabMacd").addEventListener("click", () => setEdgeModule("macd"));
+$("tabAnomaly").addEventListener("click", () => setEdgeModule("anomaly"));
+$("tabEdge").addEventListener("click", () => setEdgeModule("edge"));
 
-    bingxSetStatus(
-      "歷史資料搜尋系統已準備完成。\n" +
-      "已連接本機資料庫，可以開始下載或續傳。"
-    );
-  } catch (error) {
-    bingxSetStatus(
-      "資料庫初始化失敗：" + String(error.message || error)
-    );
+function edgePivots(values, kind, left=2, right=2) {
+  const out = [];
+  for (let i=left; i<values.length-right; i++) {
+    const v=values[i];
+    if (!Number.isFinite(v)) continue;
+    const w=values.slice(i-left,i+right+1);
+    if (kind==="high" ? v===Math.max(...w) : v===Math.min(...w)) {
+      if (w.filter(x=>x===v).length===1) out.push(i);
+    }
   }
-})();
+  return out;
+}
+
+function edgeReadCandles(raw) {
+  const now=Date.now();
+  return (Array.isArray(raw)?raw:[]).filter(c=>Number(c[6])<now).map(c=>({
+    time:Number(c[0]), open:Number(c[1]), high:Number(c[2]), low:Number(c[3]),
+    close:Number(c[4]), volume:Number(c[5]), quoteVolume:Number(c[7]),
+    trades:Number(c[8]), takerBuyBase:Number(c[9]), takerBuyQuote:Number(c[10])
+  })).filter(c=>[c.time,c.open,c.high,c.low,c.close,c.quoteVolume].every(Number.isFinite));
+}
+
+function edgeStructure(candles) {
+  if (candles.length<30) return {label:"資料不足",direction:"neutral",reason:"4H K 線不足"};
+  const highs=candles.map(c=>c.high), lows=candles.map(c=>c.low);
+  const hp=edgePivots(highs,"high"), lp=edgePivots(lows,"low");
+  if (hp.length<2 || lp.length<2) return {label:"波段不足",direction:"neutral",reason:"尚無兩組已確認高低點"};
+  const h1=hp[hp.length-2], h2=hp[hp.length-1], l1=lp[lp.length-2], l2=lp[lp.length-1];
+  const higherHigh=highs[h2]>highs[h1], higherLow=lows[l2]>lows[l1];
+  const lowerHigh=highs[h2]<highs[h1], lowerLow=lows[l2]<lows[l1];
+  const last=candles[candles.length-1].close;
+  const priorHigh=highs[hp[hp.length-1]], priorLow=lows[lp[lp.length-1]];
+  let direction="neutral", label="區間／未確認";
+  if (higherHigh && higherLow) {direction="bull";label="多方結構 HH／HL";}
+  else if (lowerHigh && lowerLow) {direction="bear";label="空方結構 LH／LL";}
+  const brokeHigh=last>priorHigh, brokeLow=last<priorLow;
+  if (brokeHigh) {label=direction==="bear"?"多方 CHOCH 候選":"多方 BOS 候選";direction="bull";}
+  if (brokeLow) {label=direction==="bull"?"空方 CHOCH 候選":"空方 BOS 候選";direction="bear";}
+  return {label,direction,reason:`最近已確認波段高點 ${priorHigh}；低點 ${priorLow}`,priorHigh,priorLow};
+}
+
+function edgeLiquidityEvent(candles) {
+  if (candles.length<25) return {label:"資料不足",direction:"neutral",reason:"1H K 線不足"};
+  const c=candles[candles.length-1], prior=candles.slice(-21,-1);
+  const previousHigh=Math.max(...prior.map(x=>x.high));
+  const previousLow=Math.min(...prior.map(x=>x.low));
+  if (c.low<previousLow && c.close>previousLow) return {label:"低點掃蕩後收回",direction:"bull",reason:`刺穿前 20 根低點 ${previousLow} 後收盤收回`};
+  if (c.high>previousHigh && c.close<previousHigh) return {label:"高點掃蕩後收回",direction:"bear",reason:`刺穿前 20 根高點 ${previousHigh} 後收盤跌回`};
+  if (c.close>previousHigh) return {label:"向上突破候選",direction:"bull",reason:"1H 收盤高於前 20 根高點"};
+  if (c.close<previousLow) return {label:"向下跌破候選",direction:"bear",reason:"1H 收盤低於前 20 根低點"};
+  return {label:"尚無明確事件",direction:"neutral",reason:"未掃過或收盤突破前 20 根區間"};
+}
+
+function edge15mObservation(candles) {
+  if (candles.length<22) return "15m 資料不足";
+  const last=candles[candles.length-1], base=candles.slice(-21,-1);
+  const med=median(base.map(x=>x.quoteVolume));
+  const ratio=med>0?last.quoteVolume/med:NaN;
+  const takerBuy=last.takerBuyQuote;
+  const takerSell=last.quoteVolume-takerBuy;
+  const buyRatio=takerSell>0?takerBuy/takerSell:NaN;
+  return `成交額 ${formatRatio(ratio)}；主動買／賣 ${formatRatio(buyRatio)}；${last.close>=last.open?"收紅":"收黑"}`;
+}
+
+async function edgeEnrich(item) {
+  const symbol=encodeURIComponent(item.symbol), t=item.eventTime;
+  const start=t-60*60*1000, fundingStart=t-4*60*60*1000;
+  const tasks=await Promise.allSettled([
+    getJSON(`${API}/futures/data/openInterestHist?symbol=${symbol}&period=5m&startTime=${start}&endTime=${t}&limit=12`),
+    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&startTime=${fundingStart}&endTime=${t}&limit=100`),
+    getJSON(`${API}/fapi/v1/fundingRate?symbol=${symbol}&limit=1`),
+    getJSON(`${API}/futures/data/takerlongshortRatio?symbol=${symbol}&period=5m&startTime=${start}&endTime=${t}&limit=12`)
+  ]);
+  item.oiText="無資料"; item.oiChange=null; item.oiActivity="資料不足";
+  item.fundingLatest=null; item.funding1h="資料不足"; item.funding2h="資料不足"; item.funding4h="資料不足"; item.fundingTrend="資料不足";
+  item.takerText="無資料";
+  const oi=tasks[0];
+  if(oi.status==="fulfilled" && Array.isArray(oi.value) && oi.value.length>=2){
+    const a=Number(oi.value[0].sumOpenInterest), b=Number(oi.value[oi.value.length-1].sumOpenInterest);
+    if(a>0 && Number.isFinite(b)){
+      item.oiChange=(b/a-1)*100;
+      item.oiText=`${item.oiChange>=0?"增加":"減少"} ${formatPct(item.oiChange)}`;
+      const pc=item.priceChange1h;
+      if(Math.abs(item.oiChange)<0.05) item.oiActivity="未平倉合約總量變化不大";
+      else if(item.oiChange>0 && pc>0) item.oiActivity="價格上漲＋未平倉量增加：新合約活動增加";
+      else if(item.oiChange>0 && pc<0) item.oiActivity="價格下跌＋未平倉量增加：新合約活動增加";
+      else if(item.oiChange<0 && pc>0) item.oiActivity="價格上漲＋未平倉量減少：可能有部位平倉";
+      else if(item.oiChange<0 && pc<0) item.oiActivity="價格下跌＋未平倉量減少：可能有部位平倉";
+      else item.oiActivity="OI 有變化；價格方向不明";
+
+    }
+  }
+  const fr=tasks[1];
+  let rates=[];
+  if(fr.status==="fulfilled" && Array.isArray(fr.value)){
+    rates=fr.value.map(x=>({time:Number(x.fundingTime),rate:Number(x.fundingRate)*100})).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.rate)).sort((a,b)=>a.time-b.time);
+  }
+  const latest=tasks[2];
+  if(latest.status==="fulfilled" && Array.isArray(latest.value) && latest.value.length){
+    const x=latest.value[latest.value.length-1];
+    item.fundingLatest=Number(x.fundingRate)*100;
+    item.fundingLatestText=`${formatPct(item.fundingLatest,4)}（${formatLocalTime(Number(x.fundingTime))}）`;
+  } else item.fundingLatestText="無最新結算資料";
+  const describeWindow=(hours)=>{
+    const cutoff=t-hours*60*60*1000, arr=rates.filter(x=>x.time>=cutoff&&x.time<=t);
+    if(!arr.length)return "資料不足（期間內無結算紀錄）";
+    const first=arr[0],last=arr[arr.length-1];
+    const sign=last.rate>0?"正":last.rate<0?"負":"零";
+    const delta=last.rate-first.rate;
+    return `${sign}值 ${formatPct(last.rate,4)}；${arr.length} 筆${arr.length>1?`，變化 ${formatPct(delta,4)} 個百分點`:"結算紀錄"}`;
+  };
+  item.funding1h=describeWindow(1); item.funding2h=describeWindow(2); item.funding4h=describeWindow(4);
+  if(rates.length>=2){
+    const a=rates[0].rate,b=rates[rates.length-1].rate;
+    if(a>0&&b<0)item.fundingTrend="正轉負";
+    else if(a<0&&b>0)item.fundingTrend="負轉正";
+    else if(b>a)item.fundingTrend="費率上升";
+    else if(b<a)item.fundingTrend="費率下降";
+    else item.fundingTrend="變化不明顯";
+  } else item.fundingTrend="資料不足（結算筆數不足）";
+  const tk=tasks[3];
+  if(tk.status==="fulfilled" && Array.isArray(tk.value) && tk.value.length){
+    const x=tk.value[tk.value.length-1]; item.takerText=formatRatio(Number(x.buySellRatio)); item.takerRatio=Number(x.buySellRatio);
+  }
+  return item;
+}
+
+function edgeSortValue(row,key){
+  if(key==="stage")return `${row.stage} ${row.direction}`;
+  if(key==="oiChange")return Number.isFinite(row.oiChange)?row.oiChange:null;
+  if(key==="fundingLatest")return Number.isFinite(row.fundingLatest)?row.fundingLatest:null;
+  if(key==="takerRatio")return Number.isFinite(row.takerRatio)?row.takerRatio:null;
+  if(key==="quoteVolume24h")return Number.isFinite(row.quoteVolume24h)?row.quoteVolume24h:null;
+  if(key==="funding1h")return row.funding1h||"";
+  if(key==="funding2h")return row.funding2h||"";
+  if(key==="funding4h")return row.funding4h||"";
+  if(key==="fundingTrend")return row.fundingTrend||"";
+  if(key==="oiActivity")return row.oiActivity||"";
+  return row[key]??"";
+}
+function renderEdgeRows() {
+  const body=$("edgeResults"); body.replaceChildren();
+  const rows=[...edgeState.rows].sort((a,b)=>{
+    if(edgeState.sortKey==="rank")return b.rank-a.rank;
+    const av=edgeSortValue(a,edgeState.sortKey),bv=edgeSortValue(b,edgeState.sortKey);
+    if(av===null||av==="")return 1;if(bv===null||bv==="")return -1;
+    const cmp=typeof av==="number"&&typeof bv==="number"?av-bv:String(av).localeCompare(String(bv),"zh-TW",{numeric:true});
+    return edgeState.sortDirection==="asc"?cmp:-cmp;
+  });
+  const counts={early:rows.filter(x=>x.stage==="提前觀察").length, confirmed:rows.filter(x=>x.stage==="條件確認").length};
+  $("edgeSummary").textContent="";
+  for(const [label,value] of [["候選數",rows.length],["提前觀察",counts.early],["條件確認",counts.confirmed]]){
+    const div=document.createElement("div");div.className="edge-chip";div.textContent=`${label}：${value}`;$("edgeSummary").appendChild(div);
+  }
+  for(const x of rows){
+    const tr=document.createElement("tr");
+    const dir=x.direction==="bull"?"多方":x.direction==="bear"?"空方":"中性";
+    const cells=[x.symbol,`${x.stage}／${dir}`,x.structure,x.event,x.m15,x.oiText,x.oiActivity,x.fundingLatestText||"無資料",x.funding1h,x.funding2h,x.funding4h,x.fundingTrend,x.takerText,Number.isFinite(x.quoteVolume24h)?`${(x.quoteVolume24h/1e6).toFixed(2)}M USDT`:"無資料",`${x.reason}；${x.dataNote||"OI 不代表單邊多空；資金費率只查最近 4 小時結算紀錄"}`];
+    cells.forEach((v,i)=>{const td=document.createElement("td");td.textContent=v;if(i===1)td.className=x.stage==="條件確認"?"edge-confirm":x.direction==="bear"?"edge-bear":x.direction==="bull"?"edge-alert":"edge-neutral";if(i===14)td.className="edge-detail";tr.appendChild(td);});
+    body.appendChild(tr);
+  }
+  document.querySelectorAll("[data-edge-sort]").forEach(btn=>{
+    const key=btn.dataset.edgeSort;
+    btn.querySelector(".sort-mark")?.remove();
+    const mark=document.createElement("span");mark.className="sort-mark";mark.textContent=key===edgeState.sortKey?(edgeState.sortDirection==="asc"?"↑":"↓"):"↕";btn.appendChild(mark);
+  });
+}
+document.querySelectorAll("[data-edge-sort]").forEach(btn=>btn.addEventListener("click",()=>{
+  const key=btn.dataset.edgeSort;
+  if(edgeState.sortKey===key)edgeState.sortDirection=edgeState.sortDirection==="asc"?"desc":"asc";
+  else {edgeState.sortKey=key;edgeState.sortDirection="asc";}
+  renderEdgeRows();
+}));
+
+$("exportEdge").addEventListener("click",()=>{
+  downloadCSV("binance_trading_edge_scanner.csv",
+    ["symbol","stage","direction","4h_structure","1h_event","15m_observation","oi_change_pct","oi_activity","latest_funding","funding_1h","funding_2h","funding_4h","funding_trend","taker_buy_sell_ratio","quote_volume_24h","reason"],
+    edgeState.rows.map(x=>[x.symbol,x.stage,x.direction,x.structure,x.event,x.m15,x.oiText,x.oiActivity,x.fundingLatestText,x.funding1h,x.funding2h,x.funding4h,x.fundingTrend,x.takerText,x.quoteVolume24h,x.reason]));
+});
+
+$("scanEdge").addEventListener("click",async()=>{
+  if(edgeState.running)return;
+  edgeState.running=true;$("scanEdge").disabled=true;$("exportEdge").disabled=true;
+  $("edgeResults").replaceChildren();$("edgeSummary").replaceChildren();edgeState.rows=[];edgeState.sortKey="rank";edgeState.sortDirection="desc";
+  const minVolume=Number($("edgeMinVolume").value);
+  try{
+    $("edgeStatus").textContent="取得 Binance USDT 永續合約清單與 24H 成交額……";
+    const [info,tickers]=await Promise.all([getJSON(API+"/fapi/v1/exchangeInfo"),getJSON(API+"/fapi/v1/ticker/24hr")]);
+    if(!Array.isArray(info.symbols)||!Array.isArray(tickers))throw new Error("Binance 回傳格式不正確");
+    const volumes=new Map(tickers.map(x=>[x.symbol,Number(x.quoteVolume)]));
+    const symbols=info.symbols.filter(x=>x.status==="TRADING"&&x.contractType==="PERPETUAL"&&x.quoteAsset==="USDT"&&(volumes.get(x.symbol)||0)>=minVolume).map(x=>x.symbol);
+    let done=0;const candidates=[],errors=[];
+    $("edgeStatus").textContent=`第一階段：掃描 ${symbols.length} 個符合成交額門檻的 USDT 永續合約（4H＋1H）……`;
+    await mapWithConcurrency(symbols,5,async symbol=>{
+      try{
+        const [raw4h,raw1h]=await Promise.all([
+          getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=4h&limit=100`),
+          getJSON(`${API}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1h&limit=100`)
+        ]);
+        const c4=edgeReadCandles(raw4h),c1=edgeReadCandles(raw1h);
+        const st=edgeStructure(c4),ev=edgeLiquidityEvent(c1);
+        if(st.direction!=="neutral"||ev.direction!=="neutral"){
+          const direction=ev.direction!=="neutral"?ev.direction:st.direction;
+          const aligned=st.direction===direction&&ev.direction===direction;
+          const priceChange1h=c1.length>=2?(c1[c1.length-1].close/c1[c1.length-2].close-1)*100:null;
+          candidates.push({symbol,direction,structure:st.label,event:ev.label,priceChange1h,reason:`${st.reason}；${ev.reason}`,eventTime:c1.length?c1[c1.length-1].time:Date.now(),quoteVolume24h:volumes.get(symbol),stage:aligned?"條件確認":"提前觀察",rank:(aligned?2:1)+(ev.direction!=="neutral"?1:0),dataNote:""});
+        }
+      }catch(e){errors.push(`${symbol}: ${e.message||e}`);}
+      finally{done++;if(done%30===0||done===symbols.length)$("edgeStatus").textContent=`第一階段：${done}/${symbols.length}\n結構／事件候選：${candidates.length}\n請求錯誤：${errors.length}`;}
+    });
+    candidates.sort((a,b)=>b.rank-a.rank);
+    const shortlist=candidates.slice(0,60);
+    $("edgeStatus").textContent=`第二階段：${shortlist.length} 個候選補查 15m、OI、資金費率與主動買賣比……`;
+    await mapWithConcurrency(shortlist,3,async item=>{
+      const sym=encodeURIComponent(item.symbol);
+      try{
+        const [raw15]=await Promise.all([getJSON(`${API}/fapi/v1/klines?symbol=${sym}&interval=15m&limit=30`)]);
+        item.m15=edge15mObservation(edgeReadCandles(raw15));
+        await edgeEnrich(item);
+      }catch(e){item.m15=item.m15||"補查失敗";item.dataNote=String(e.message||e);}
+    });
+    edgeState.rows=shortlist;renderEdgeRows();
+    $("exportEdge").disabled=!shortlist.length;
+    $("edgeStatus").textContent=`交易優勢掃描完成\n符合成交額門檻合約：${symbols.length}\n結構／事件候選：${candidates.length}\n顯示候選：${shortlist.length}\n請求錯誤：${errors.length}\n注意：候選規則尚未經回測驗證，不代表已證明有交易優勢。`;
+  }catch(e){$("edgeStatus").textContent="第三項掃描中止："+String(e.message||e);}
+  finally{edgeState.running=false;$("scanEdge").disabled=false;}
+});
+
+</script>
+</body>
+</html>
